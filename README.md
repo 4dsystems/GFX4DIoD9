@@ -2,7 +2,7 @@
 # GFX4dIoD9
 ================================================================================
 
-Graphics Library for the IoD-09TH and IoD-09SM by 4D Systems - Updated 03-OCT-2017
+Graphics Library for the IoD-09TH and IoD-09SM by 4D Systems - Updated 05-OCT-2017
 
 The ESP8266 Core is required to be installed for WiFi functionality of the IoD-09 Range.
 
