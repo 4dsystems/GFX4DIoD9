@@ -734,6 +734,7 @@ void GFX4dIoD9::PrintImage(uint8_t ui){
   }
 }
 
+
 void GFX4dIoD9::DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw, int16_t uih, uint16_t frame, int16_t bar){
   if(bar != 0){
   uix = uix + bar;
@@ -774,7 +775,15 @@ void GFX4dIoD9::DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw
   uint16_t cpos;
   uint32_t isize = uiw * uih;
   if((isize % 2) == 0) even = true;
-  uint32_t pos = (isize * frame) * 2;
+  userImag.seek(Index + 4);
+  int cdv;
+  uint32_t pos;
+  cdv = userImag.read();
+  if(cdv == 8){
+  pos = (isize * frame);
+  } else {
+  pos = (isize * frame) * 2;
+  }
   if(uimage == false){
   userImag.seek(Index + 8 + pos);
   } else {
@@ -789,8 +798,14 @@ void GFX4dIoD9::DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw
   if(off == false){
   uint32_t cbuff[500];
   for(uint32_t idraw = 0; idraw < ichunk; idraw ++){
-  uint32_t tempc =userImag.read() << 24; tempc = tempc + (userImag.read() << 16);
+  uint32_t tempc;
+  if(cdv == 8){
+  tempc =(userImag.read() * 257) << 16;
+  tempc = tempc + (userImag.read() * 257);
+  } else {
+  tempc =userImag.read() << 24; tempc = tempc + (userImag.read() << 16);
   tempc = tempc + (userImag.read() << 8); tempc = tempc + userImag.read() ;
+  }
   cbuff[cpos] = tempc;
   cpos++;
   if(cpos == 500){
@@ -828,6 +843,8 @@ void GFX4dIoD9::DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw
   }
   }
 }
+
+
 
 void GFX4dIoD9::UserImage(uint8_t ui){
   UserImage(ui, 0x7fff, 0x7fff);
@@ -950,7 +967,7 @@ void GFX4dIoD9::UserImages(uint8_t uisnb, int16_t framenb){
   tuiw = tuiw + gciobj[gciapos + 9];
   tuih = gciobj[gciapos + 10] << 8;
   tuih = tuih + gciobj[gciapos + 11];
-  if(framenb > (gciobjframes[uisnb] -1)){
+  if(framenb > (gciobjframes[uisnb] -1) || framenb < 0){
   outofrange(tuix, tuiy, tuiw, tuih);
   } else {
   DrawWidget(tuiIndex, tuix, tuiy, tuiw, tuih, framenb, 0);
@@ -976,7 +993,7 @@ void GFX4dIoD9::UserImages(uint8_t uis, int16_t frame, int offset, int16_t altx,
   tuiw = tuiw + gciobj[gciapos + 9];
   tuih = gciobj[gciapos + 10] << 8;
   tuih = tuih + gciobj[gciapos + 11];
-  if(frame > (gciobjframes[uis]- 1)){
+  if(frame > (gciobjframes[uis]- 1) || frame < 0){
   outofrange(tuix, tuiy, tuiw, tuih);
   } else {
   DrawWidget(tuiIndex, altx, alty, tuiw, tuih, frame, offset);
@@ -1025,7 +1042,7 @@ void GFX4dIoD9::UserImages(uint8_t uisnb, int16_t framenb, int16_t newx, int16_t
   tuiw = tuiw + gciobj[gciapos + 9];
   tuih = gciobj[gciapos + 10] << 8;
   tuih = tuih + gciobj[gciapos + 11];
-  if(framenb > (gciobjframes[uisnb] -1)){
+  if(framenb > (gciobjframes[uisnb] -1) || framenb < 0){
   outofrange(tuix, tuiy, tuiw, tuih);
   } else {
   DrawWidget(tuiIndex, tuix, tuiy, tuiw, tuih, framenb, 0);
@@ -1055,7 +1072,7 @@ void GFX4dIoD9::UserImages(uint8_t uis, int16_t frame, int offset){
   tuiw = tuiw + gciobj[gciapos + 9];
   tuih = gciobj[gciapos + 10] << 8;
   tuih = tuih + gciobj[gciapos + 11];
-  if(frame > (gciobjframes[uis]- 1)){
+  if(frame > (gciobjframes[uis]- 1) || frame < 0){
   outofrange(tuix, tuiy, tuiw, tuih);
   } else {
   DrawWidget(tuiIndex, tuix, tuiy, tuiw, tuih, frame, offset);
@@ -2859,6 +2876,11 @@ void GFX4dIoD9::UserImagesDR(uint8_t uino, int frames, uint16_t uxpos, uint16_t 
   uint32_t cbuff[500];
   uint32_t tempc;
   cpos = 0;
+  if(frames > (gciobjframes[uino]- 1) || frames < 0){
+  outofrange(tuix + uxpos, tuiy + uypos, uwidth, uheight);
+  ScrollEnable(setemp);
+  return;
+  }
   setGRAM(tuix + uxpos, tuiy + uypos, tuix + uxpos + uwidth  -1, tuiy + uypos + uheight -1);
   for(uint32_t idraw = 0; idraw < ichunk; idraw ++){
   tempc = userImag.read() << 24; tempc = tempc + (userImag.read() << 16);
@@ -3134,4 +3156,39 @@ void GFX4dIoD9::HLS2RGB(uint8_t H, uint8_t L, uint8_t S){
   GFX4dIoD9_GREEN = hue_RGB(H, M1, M2) ;
   GFX4dIoD9_BLUE = hue_RGB(H-HLSMAXd3, M1, M2) ;
   }
+}
+
+void GFX4dIoD9::imageTouchEnable(uint8_t gcinum, boolean en){
+  return;
+}
+
+uint8_t GFX4dIoD9::imageTouched(){
+  return 255;
+}
+
+uint16_t GFX4dIoD9::touch_GetX(){
+  return 0;
+}
+
+uint16_t GFX4dIoD9::touch_GetY(){
+  return 0;
+}
+
+uint8_t GFX4dIoD9::touch_GetPen(){  
+  return 255; 
+}
+
+uint8_t GFX4dIoD9::CheckButtons(void){
+  butchnge = true;
+  int ret = 255; 
+  return ret;
+  butchnge = false;
+}
+
+boolean GFX4dIoD9::touch_Update() {
+  return false;
+}
+
+void GFX4dIoD9::touch_Set(uint8_t mode) {
+  return;
 }

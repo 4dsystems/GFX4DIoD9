@@ -679,6 +679,7 @@ GFX4dIoD9();
            DownloadFile(String Address, uint16_t port, String hfile, String Fname),
            Download(String Address, uint16_t port, String hfile, String Fname),
            ScrollEnable(boolean se),
+           touch_Set(uint8_t mode),
            UserImage(uint8_t ui),
            UserImage(uint8_t ui, int altx, int alty),
            UserImageDR(uint8_t ui, uint16_t uxpos, uint16_t uypos, uint16_t uwidth, uint16_t uheight, uint16_t tuix, uint16_t tuiy),
@@ -701,6 +702,7 @@ boolean draw, uint32_t bgindex),
            PrintImageWifi(String Address, uint16_t port, String hfile),
            PrintImageWifi(String WebAddr),
            ImageWifi(boolean local, String Address, uint16_t port, String hfile),
+           imageTouchEnable(uint8_t gcinum, boolean en),
            TextSize(uint8_t s),
            TextColor(uint16_t c),
            TextColor(uint16_t c, uint16_t b),
@@ -769,9 +771,15 @@ boolean draw, uint32_t bgindex),
   uint16_t read16(void);
   uint32_t read32(void);
   uint32_t bevelColor(uint16_t colorb);
+  uint16_t touch_GetX(void);
+  uint16_t touch_GetY(void);
+  uint8_t touch_GetPen(void);
+  uint8_t imageTouched(void);
+  uint8_t CheckButtons(void);
   String GetCommand();
   boolean CheckSD(void);
   boolean CheckDL(void);
+  boolean touch_Update(void);
   void     Scroll(uint16_t VSP);
   void     setScrollArea(uint16_t TFA, uint16_t BFA);  
   uint8_t  getValfromString(String strval, uint8_t indx);
