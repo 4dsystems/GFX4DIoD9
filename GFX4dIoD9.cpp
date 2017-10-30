@@ -184,6 +184,8 @@
 #include <ESP8266HTTPClient.h>
 //#include "SdFat.h"
 
+//SdFat SD;
+
 #define hwSPI true
 
 #define swap(a, b) { int16_t tab = a; a = b; b = tab; }
@@ -299,7 +301,7 @@ void GFX4dIoD9::begin() {
   BFA = 160;
   Cls(0);
   Orientation(0);
-  if(SD.begin(_sd, 30000000)){
+  if(SD.begin(_sd, 39000000)){
   sdok = true;
   } else {
   sdok = false;
@@ -800,8 +802,8 @@ void GFX4dIoD9::DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw
   for(uint32_t idraw = 0; idraw < ichunk; idraw ++){
   uint32_t tempc;
   if(cdv == 8){
-  tempc =(userImag.read() * 257) << 16;
-  tempc = tempc + (userImag.read() * 257);
+  tempc = RGB3322565[userImag.read()] << 16;
+  tempc = tempc + RGB3322565[userImag.read()]; 
   } else {
   tempc =userImag.read() << 24; tempc = tempc + (userImag.read() << 16);
   tempc = tempc + (userImag.read() << 8); tempc = tempc + userImag.read() ;
@@ -817,13 +819,23 @@ void GFX4dIoD9::DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw
   WrGRAMs(cbuff, cpos);  
   }
   if(even == false){
+  if(cdv == 8){
+  uint16_t tempco = RGB3322565[userImag.read()];
+  WrGRAM16(tempco);
+  } else {
   uint16_t tempco = (userImag.read() << 8); tempco = tempco + userImag.read() ;
   WrGRAM16(tempco);
+  }
   }
   } else {
   uint16_t cbuff[500];
   for(uint32_t idraw = 0; idraw < isize; idraw ++){
-  uint16_t tempc = (userImag.read() << 8); tempc = tempc + userImag.read() ;
+  uint16_t tempc;
+  if(cdv == 8){
+  tempc = RGB3322565[userImag.read()];
+  } else {
+  tempc = (userImag.read() << 8); tempc = tempc + userImag.read() ;
+  }
   if(urow >= cuix && urow <= (xl)  && ucol >= cuiy && ucol <=(yl)){
   cbuff[cpos] = tempc;
   cpos++;
@@ -918,7 +930,7 @@ void GFX4dIoD9::LedDigitsDisplaySigned(int16_t newval, uint16_t index, int16_t D
 }
 
 void GFX4dIoD9::LedDigitsDisplay(int16_t newval, uint16_t index, int16_t Digits, int16_t MinDigits, int16_t WidthDigit, int16_t LeadingBlanks){
-  LedDigitsDisplaySigned(newval, index, Digits, MinDigits, WidthDigit, LeadingBlanks, 0x7fff ,0x7fff);
+  LedDigitsDisplay(newval, index, Digits, MinDigits, WidthDigit, LeadingBlanks, 0x7fff ,0x7fff);
 }
 
 void GFX4dIoD9::LedDigitsDisplay(int16_t newval, uint16_t index, int16_t Digits, int16_t MinDigits, int16_t WidthDigit, int16_t LeadingBlanks, int16_t altx, int16_t alty){
@@ -1247,6 +1259,13 @@ void GFX4dIoD9::ImageWifi(boolean local, String Address, uint16_t port, String h
   nl = true;
   lastfsh = 1;
   }
+}
+uint8_t GFX4dIoD9::getNumberofObjects(void){
+  return gciobjnum;
+}
+
+void GFX4dIoD9::Close4dGFX(){
+  userImag.close();
 }
 
 void GFX4dIoD9::Open4dGFX(String file4d){
@@ -2126,6 +2145,24 @@ void GFX4dIoD9::WrGRAMs16(uint16_t *data, uint16_t l) {
   SPI.endTransaction();
 }
 
+void GFX4dIoD9::WrGRAMs(uint32_t *data, uint16_t l, boolean even) {
+  uint32_t tdw;
+  if(!even) l--;
+  SPI.beginTransaction(spiSettings);
+  digitalWrite(_dc, HIGH);  
+  digitalWrite(_cs, LOW);
+  while(l--){
+  tdw = *data++;
+  SPI.write32(tdw, true);
+  }
+  if(!even){ 
+  tdw = *data++; 
+  SPI.write16(tdw, true);
+  }
+  digitalWrite(_cs, HIGH);
+  SPI.endTransaction();
+}
+
 void GFX4dIoD9::WrGRAMs(uint32_t *data, uint16_t l) {
   uint32_t tdw;
   SPI.beginTransaction(spiSettings);
@@ -2831,10 +2868,13 @@ void GFX4dIoD9::UserImagesDR(uint8_t uino, int frames, uint16_t uxpos, uint16_t 
   uint16_t tuiy;
   uint16_t tuiw;
   uint16_t tuih;
+  uint8_t cdv;
   tuiIndex = (gciobj[gciapos] << 24);
   tuiIndex = tuiIndex + (gciobj[gciapos + 1] << 16);
   tuiIndex = tuiIndex + (gciobj[gciapos + 2] << 8);
   tuiIndex = tuiIndex + gciobj[gciapos + 3];
+  userImag.seek(tuiIndex + 4);
+  cdv = userImag.read();
   tuix = gciobj[gciapos + 4] << 8;
   tuix = tuix + gciobj[gciapos + 5];
   tuiy = gciobj[gciapos + 6] << 8;
@@ -2868,8 +2908,15 @@ void GFX4dIoD9::UserImagesDR(uint8_t uino, int frames, uint16_t uxpos, uint16_t 
   uint16_t bc;
   uint32_t isize = tuiw * tuih;
   uint16_t isize2 = uwidth * uheight;
-  uint32_t pos = (isize * frames) * 2;
-  uint32_t uoff = (((uypos * tuiw) + uxpos) * 2);
+  uint32_t pos;
+  uint32_t uoff;
+  if(cdv == 8){
+  pos = (isize * frames);
+  uoff = ((uypos * tuiw) + uxpos);
+  } else {
+  pos = (isize * frames) * 2;
+  uoff = (((uypos * tuiw) + uxpos) * 2);
+  }
   bgoff = tuiIndex + 8 + pos + uoff + 0;
   userImag.seek(bgoff);
   uint32_t ichunk = isize2 / 2;
@@ -2883,16 +2930,26 @@ void GFX4dIoD9::UserImagesDR(uint8_t uino, int frames, uint16_t uxpos, uint16_t 
   }
   setGRAM(tuix + uxpos, tuiy + uypos, tuix + uxpos + uwidth  -1, tuiy + uypos + uheight -1);
   for(uint32_t idraw = 0; idraw < ichunk; idraw ++){
+  if(cdv == 8){
+  tempc = RGB3322565[userImag.read()] << 16;
+  tempc = tempc + RGB3322565[userImag.read()]; 
+  } else {
   tempc = userImag.read() << 24; tempc = tempc + (userImag.read() << 16);
   tempc = tempc + (userImag.read() << 8); tempc = tempc + userImag.read() ;
+  }
   cbuff[cpos] = tempc;
   cpos++;
   left++;
   left++;
   if(left > (uwidth - 1)){
   left = 0;
+  if(cdv == 8){
+  bgoff = bgoff + ((tuiw));
+  userImag.seek(bgoff + (left));
+  } else {
   bgoff = bgoff + ((tuiw) * 2);
   userImag.seek(bgoff + (left * 2));
+  }
   }
   if(cpos == 500){
   WrGRAMs(cbuff, cpos);
