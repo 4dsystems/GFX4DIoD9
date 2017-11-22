@@ -2681,11 +2681,12 @@ void GFX4dIoD9::SetData(uint8_t * data, uint8_t size) {
 }
 
 void GFX4dIoD9::BacklightOn(boolean bl) {
-  if(bl){  
-  digitalWrite(_disp, HIGH);
-  } else {
-  digitalWrite(_disp, LOW);
-  }
+  boolean bld = bl;
+  //if(bl){  
+  //digitalWrite(_disp, HIGH);
+  //} else {
+  //digitalWrite(_disp, LOW);
+  //}
 }
 
 int16_t GFX4dIoD9::getHeight(void) {
