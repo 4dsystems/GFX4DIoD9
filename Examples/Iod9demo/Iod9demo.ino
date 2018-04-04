@@ -195,9 +195,8 @@ void setup() {
     gfx.PrintImageWifi("http://www.4dsystems.com.au/downloads/RAW/iod9.gci");
     delay(4000);
     gfx.Cls();
-    
-    gfx.Open4dGFX("iod9");
   }
+  gfx.Open4dGFX("iod9");
 }
 
 void loop() {

@@ -702,6 +702,7 @@ GFX4dIoD9();
            WrGRAMs(uint32_t *data, uint16_t l, boolean even),
            WrGRAM16(uint16_t color),
            WrGRAMs16(uint16_t *data, uint16_t l),
+           WrGRAMs8(uint8_t *data, uint16_t l, byte mul),
            FillScreen(uint16_t color),
            PutPixel(int16_t x, int16_t y, uint16_t color),
            Font(uint8_t f),
@@ -712,8 +713,9 @@ GFX4dIoD9();
            newLine(int8_t f1, int8_t ts, uint16_t ux),
            Open4dGFX(String file4d),
            DownloadFile(String WebAddr, String Fname),
+           DownloadFile(String WebAddr, String Fname, String sha1),
            DownloadFile(String Address, uint16_t port, String hfile, String Fname),
-           Download(String Address, uint16_t port, String hfile, String Fname),
+           Download(String Address, uint16_t port, String hfile, String Fname, String sha1),
            ScrollEnable(boolean se),
            touch_Set(uint8_t mode),
            UserImage(uint8_t ui),
@@ -728,16 +730,20 @@ GFX4dIoD9();
            LedDigitsDisplay(int16_t newval, uint16_t index, int16_t Digits, int16_t MinDigits, int16_t WidthDigit, int16_t LeadingBlanks, int16_t altx, int16_t alty),
            LedDigitsDisplaySigned(int16_t newval, uint16_t index, int16_t Digits, int16_t MinDigits, int16_t WidthDigit, int16_t LeadingBlanks),
            LedDigitsDisplaySigned(int16_t newval, uint16_t index, int16_t Digits, int16_t MinDigits, int16_t WidthDigit, int16_t LeadingBlanks, int16_t altx, int16_t alty),
-           DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw, int16_t uih, uint16_t frame, int16_t bar),
+           DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw, int16_t uih, uint16_t frame, int16_t bar, bool images, uint8_t cdv),
            DrawImage(uint32_t Index, int16_t uix, int16_t uiy),
            UserCharacter(uint32_t *data, uint8_t ucsize, int16_t ucx, int16_t ucy, uint16_t color, uint16_t bgcolor),
            UserCharacterBG(uint32_t *data, uint8_t ucsize, uint16_t ucx, uint16_t ucy, uint16_t color, 
 boolean draw, uint32_t bgindex),
+           UserCharacterBG(int8_t ui, uint32_t *data, uint8_t ucsize, uint16_t ucx, uint16_t ucy, uint16_t color, boolean draw),
+           UserCharacterBG(uint32_t *data, uint8_t ucsize, uint16_t ucx, uint16_t ucy, uint16_t color, boolean draw, uint32_t bgindex, bool type, int8_t ui),
            PrintImage(uint8_t iIndex),
            PrintImageFile(String ifile),
            PrintImageWifi(String Address, uint16_t port, String hfile),
            PrintImageWifi(String WebAddr),
-           ImageWifi(boolean local, String Address, uint16_t port, String hfile),
+           PrintImageWifi(String Address, uint16_t port, String hfile, String SHA1),
+           PrintImageWifi(String WebAddr, String SHA1),
+           ImageWifi(boolean local, String Address, uint16_t port, String hfile, String SHA1),
            imageTouchEnable(uint8_t gcinum, boolean en),
            TextSize(uint8_t s),
            TextColor(uint16_t c),
@@ -766,11 +772,18 @@ boolean draw, uint32_t bgindex),
            TWwrite(const char txtinput),
            TWprint(String istr),
            TWprintln(String istr),
+           TWprintAt(uint8_t pax, uint8_t pay, String istr),
            TWcls(),
+           TWcursorOn(bool twco),
            TWcolor(uint16_t fcol),
            TWcolor(uint16_t fcol, uint16_t bcol),
-           DeleteButton(uint8_t hndl, uint16_t color),
-           DeleteButton(uint8_t hndl),
+           DeleteButton(int hndl, uint16_t color),
+           DeleteButton(int hndl),
+           DeleteButtonBG(int hndl, int objBG),
+           UserImageHide(int hndl),
+           UserImageHide(int hndl, uint16_t color),
+           UserImageHideBG(int hndl, int objBG),
+           Orbit(int angle, int lngth, int *oxy),
            ButtonActive(uint8_t butno, boolean act),
            ButtonUp(int hndl),
            ButtonDown(int hndl),
@@ -818,6 +831,7 @@ boolean draw, uint32_t bgindex),
   boolean CheckSD(void);
   boolean CheckDL(void);
   boolean touch_Update(void);
+  boolean TWMoveTo(uint8_t twcrx, uint8_t twcry);
   void     Scroll(uint16_t VSP);
   void     setScrollArea(uint16_t TFA, uint16_t BFA);  
   uint8_t  getValfromString(String strval, uint8_t indx);
@@ -850,6 +864,7 @@ private:
  // uint8_t  tabcolor;
   boolean  sEnable;
   boolean  hwSPI;
+  boolean twcurson;
   int8_t fsh;
   int8_t fsh1;
   int8_t fsw;
@@ -861,15 +876,21 @@ private:
 
 protected:
 
-  uint32_t krepeat;    
+  uint32_t krepeat;
+  uint32_t tuiIndex[200];     
   int16_t
+    tuix[200],
+    tuiy[200],
+    tuiw[200],
+    tuih[200],
     width, height, cursor_x, cursor_y ,scrollpos, xic, yic;
   uint16_t
-    gciobjframes[100],
+    gciobjframes[200],
     TFA,
     BFA,
     twframecol,
     textcolor, textbgcolor,
+    chracc, chrdwn,
     txtf, txtb,
     txtx,
     txty,
@@ -888,11 +909,11 @@ protected:
     txfcol[600],
     butdelay;
   uint8_t
+    cdv[200],
     twxpos,
     twypos,
     pencount,
     oldbut,
-    gciobj[1200],
     gciobjnum,
     gciobjtouched,
     twcl,
@@ -914,7 +935,7 @@ protected:
     butchnge,
     dlok,
     sdok,
-    gciobjtouchenable[100],
+    gciobjtouchenable[200],
     scrolled,
     nl,
     txtwin,

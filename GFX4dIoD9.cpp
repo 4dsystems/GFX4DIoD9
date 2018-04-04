@@ -236,8 +236,6 @@ void GFX4dIoD9::begin() {
   pinMode(_miso, INPUT);
   pinMode(_dc, OUTPUT);
   pinMode(_cs, OUTPUT);
-  //pinMode(_disp, OUTPUT);
-  //pinMode(_tcs, OUTPUT);
   yield();
   SPI.begin();
   SPI.beginTransaction(spiSettings);
@@ -245,15 +243,11 @@ void GFX4dIoD9::begin() {
   delay(20);
   delay(10);
   SetCommand(0xB1); SetData(0x05); SetData(0x3C); SetData(0x3C); 
-  //SetCommand(0xB1); SetData(0x00); SetData(0x06); SetData(0x03);
   delay(10);
   SetCommand(0xB2); SetData(0x01); SetData(0x2C); SetData(0x2d); 
-  //SetCommand(0xB2); SetData(0x05); SetData(0x3C); SetData(0x3C); 
   delay(10);
   SetCommand(0xB3); SetData(0x01); SetData(0x2C); SetData(0x2d); 
   SetData(0x01); SetData(0x2C); SetData(0x2d); 
-  //SetCommand(0xB3); SetData(0x05); SetData(0x3C); SetData(0x3C); 
-  //SetData(0x05); SetData(0x3C); SetData(0x3C); 
   delay(10);
   SetCommand(GFX4dIoD9_INVCTR); SetData(0x03); 
   delay(10);
@@ -292,8 +286,6 @@ void GFX4dIoD9::begin() {
   delay(10);
   SetCommand(0x13);
   delay(10);
-  //SetCommand(0x35); SetData(0x01);//TE
-  //delay(10);
   SetCommand(GFX4dIoD9_DISPON);  
   SPI.endTransaction(); 
   
@@ -301,7 +293,7 @@ void GFX4dIoD9::begin() {
   BFA = 160;
   Cls(0);
   Orientation(0);
-  if(SD.begin(_sd, 39000000)){
+  if(SD.begin(_sd, 79000000)){
   sdok = true;
   } else {
   sdok = false;
@@ -673,31 +665,21 @@ void GFX4dIoD9::PrintImage(uint8_t ui){
   } else {
   return;
   }
-  int gciapos = (ui) * 12;
-  uint32_t tuiIndex;
-  int16_t tuix;
-  int16_t tuiy;
-  tuiIndex = gciobj[gciapos] << 24;
-  tuiIndex = tuiIndex + (gciobj[gciapos + 1] << 16);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 2] << 8);
-  tuiIndex = tuiIndex + gciobj[gciapos + 3];
-  userImag.seek(tuiIndex);
-  uint16_t iwidth = (userImag.read() << 8); iwidth = iwidth + userImag.read();
-  uint16_t iheight = (userImag.read() << 8); iheight =  iheight + userImag.read();
-  uint16_t coldepth = (userImag.read() << 8); coldepth = coldepth + userImag.read();
+  uint16_t iwidth = tuiw[ui];
+  uint16_t iheight = tuih[ui];
+  uint8_t mul = cdv[ui] / 8;
   uint8_t tempfsh = fsh;
+  uint32_t pos = tuiIndex[ui] + 6;
+  userImag.seek(pos);
   uint16_t isize = iwidth * iheight;
-  uint16_t ichunk = iwidth / 2;
-  uint16_t isteps = iheight / 4;
-  uint16_t irem = iheight - (isteps * 4);
+  uint16_t ichunk = iwidth << (mul - 1);
+  uint8_t buf[width << (mul - 1)];
   if(rotation == 0 || rotation == 1 || sEnable == false){
-  if((cursor_y + iheight) > height -1){
+  if(((cursor_y + iheight) - 1) > height - 1){
   iheight = iheight - ((cursor_y + iheight) - height);
   }
   }
   boolean off = false;
-  boolean even = false;
-  if((iwidth % 2) == 0) even = true;
   int cuiw = iwidth; 
   if((cursor_x + iwidth - 1) >= width){
   cuiw = iwidth - ((cursor_x + iwidth - 1) - width) - 1;
@@ -706,28 +688,19 @@ void GFX4dIoD9::PrintImage(uint8_t ui){
   for(int idraw = 0; idraw < iheight; idraw ++){
   nl = true;
   newLine(1, 1, cursor_x);
-  if((cursor_y - 1) < 0 && (rotation == 2 || rotation == 3)){
+  if((cursor_y - 1) < 0){
   setGRAM(cursor_x, cursor_y + height - 1 , cursor_x + cuiw -1 , cursor_y + height - 1);
   } else {
   setGRAM(cursor_x, cursor_y - 1 , cursor_x + cuiw -1 , cursor_y - 1);
   }
   if(off){
-  for(uint16_t pc = 0; pc < iwidth; pc ++){
-  uint16_t tempc = (userImag.read() << 8); tempc = tempc + userImag.read() ;
-  if((cursor_x + pc) < width){
-  WrGRAM16(tempc);
-  }
-  }
+  userImag.read(buf, cuiw << (mul - 1));
+  WrGRAMs8(buf, cuiw << (mul - 1), mul);
+  pos = pos + (iwidth << (mul - 1));
+  userImag.seek(pos);
   } else {
-  for(uint16_t pc = 0; pc < ichunk; pc ++){
-  uint32_t tempc =userImag.read() << 24; tempc = tempc + (userImag.read() << 16);
-  tempc = tempc + (userImag.read() << 8); tempc = tempc + userImag.read() ;
-  WrGRAM(tempc);
-  }
-  if(even == false){
-  uint16_t tempco = (userImag.read() << 8); tempco = tempco + userImag.read() ;
-  WrGRAM16(tempco);
-  }
+  userImag.read(buf, ichunk);
+  WrGRAMs8(buf, ichunk, mul);
   }
   }
   if(tempnl){
@@ -736,162 +709,99 @@ void GFX4dIoD9::PrintImage(uint8_t ui){
   }
 }
 
-
-void GFX4dIoD9::DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw, int16_t uih, uint16_t frame, int16_t bar){
-  if(bar != 0){
-  uix = uix + bar;
-  }
+void GFX4dIoD9::DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw, int16_t uih, uint16_t frame, int16_t bar, bool images, byte cdv){
+  if(bar != 0) uix = uix + bar;
   if(uix >= width || uiy >= height) return;
   if((uix + uiw - 1) < 0 || (uiy + uih - 1) < 0) return;
-  if(userImag){
-  String resultFO = "Success. ";
-  } else {
-  return;
-  }
+  if(!userImag) return;
   boolean off = false;
-  boolean even = false;
+  byte ofst = 6;
+  if(images) ofst = 8;
+  int left = 0;
+  int top = 0;
+  int right = 0;
+  int bottom = 0;
   int cuix = uix;
   int cuiy = uiy;
   int cuiw = uiw;
   int cuih = uih;  
   if(uix < 0){
-  cuix = 0;
-  cuiw = uiw + uix;
   off = true;
+  left = 0 - uix;
+  cuix = 0;
+  cuiw = cuiw + uix;
   }
   if(uiy < 0){
+  off = true;
+  top = 0 - (uiy * uiw);
   cuiy = 0;
-  cuih = uih + uiy;
-  off = true;
+  cuih = cuih + uiy;
   }
-  if((uix + uiw - 1) >= width){
-  cuiw = uiw - ((uix + uiw - 1) - width) - 1;
+  if((uix + uiw - 1) > width){
   off = true;
+  right = uiw - width;
+  cuiw = width - cuix;
   }
-  if((uiy + uih - 1) >= height){
-  cuih = uih - ((uiy + uih - 1) - height) - 1;
+  if((uiy + uih - 1) > height){
   off = true;
-  } 
-  int urow = uix;
-  int ucol = uiy;
-  uint16_t cpos;
-  uint32_t isize = uiw * uih;
-  if((isize % 2) == 0) even = true;
-  userImag.seek(Index + 4);
-  int cdv;
+  bottom = uih - height;
+  cuih = height - cuiy;
+  }
+  int steps = 0;
+  int rem;
+  int mul = 2;
+  uint32_t isize;
+  uint32_t isize2;
   uint32_t pos;
-  cdv = userImag.read();
-  if(cdv == 8){
+  int bufsize = 2048;
+  if(cdv == 8) mul = 1;
+  isize = (uiw * uih) << (mul - 1);
+  setGRAM(cuix, cuiy , cuix + cuiw - 1 , cuiy + cuih - 1);
+  if(off == true){
+  pos = ((isize * frame) + ((left + top) << (mul - 1)));
+  userImag.seek(Index + ofst + pos);
+  isize2 = (cuiw * cuih) << (mul - 1);
+  bufsize = cuiw << (mul - 1);
+  steps = isize2 / bufsize;
+  rem = 0;
+  } else {
   pos = (isize * frame);
-  } else {
-  pos = (isize * frame) * 2;
+  userImag.seek(Index + ofst + pos);
+  if(isize > bufsize) steps = isize / bufsize;
+  rem = isize - (steps * bufsize);
   }
-  if(uimage == false){
-  userImag.seek(Index + 8 + pos);
-  } else {
-  userImag.seek(Index + 6);
-  uimage = false;
-  }
-  uint32_t ichunk = isize / 2;
-  cpos = 0;
-  int xl = cuix + cuiw - 1;
-  int yl = cuiy + cuih - 1;
-  setGRAM(cuix, cuiy , xl , yl);
-  if(off == false){
-  uint32_t cbuff[500];
-  for(uint32_t idraw = 0; idraw < ichunk; idraw ++){
-  uint32_t tempc;
-  if(cdv == 8){
-  tempc = RGB3322565[userImag.read()] << 16;
-  tempc = tempc + RGB3322565[userImag.read()]; 
-  } else {
-  tempc =userImag.read() << 24; tempc = tempc + (userImag.read() << 16);
-  tempc = tempc + (userImag.read() << 8); tempc = tempc + userImag.read() ;
-  }
-  cbuff[cpos] = tempc;
-  cpos++;
-  if(cpos == 500){
-  WrGRAMs(cbuff, cpos);
-  cpos = 0;
-  }
-  }  
-  if(cpos > 0){
-  WrGRAMs(cbuff, cpos);  
-  }
-  if(even == false){
-  if(cdv == 8){
-  uint16_t tempco = RGB3322565[userImag.read()];
-  WrGRAM16(tempco);
-  } else {
-  uint16_t tempco = (userImag.read() << 8); tempco = tempco + userImag.read() ;
-  WrGRAM16(tempco);
+  uint8_t buf[bufsize];
+  if(steps > 0){
+  for(int n = 0; n < steps; n++){
+  userImag.read(buf, bufsize);
+  WrGRAMs8(buf, bufsize, mul);
+  if(off == true){
+  pos = pos + (uiw << (mul - 1));
+  userImag.seek(Index + ofst + pos);
   }
   }
-  } else {
-  uint16_t cbuff[500];
-  for(uint32_t idraw = 0; idraw < isize; idraw ++){
-  uint16_t tempc;
-  if(cdv == 8){
-  tempc = RGB3322565[userImag.read()];
-  } else {
-  tempc = (userImag.read() << 8); tempc = tempc + userImag.read() ;
   }
-  if(urow >= cuix && urow <= (xl)  && ucol >= cuiy && ucol <=(yl)){
-  cbuff[cpos] = tempc;
-  cpos++;
-  }
-  urow ++;
-  if(urow > (uix +uiw - 1)){
-  ucol ++;
-  urow = uix;
-  }
-  if(cpos == 500){
-  WrGRAMs16(cbuff, cpos);
-  cpos = 0;
-  }
-  }  
-  if(cpos > 0){
-  WrGRAMs16(cbuff, cpos);  
-  }
+  if(rem > 0){
+  userImag.read(buf, rem);
+  WrGRAMs8(buf, rem, mul);
   }
 }
-
-
 
 void GFX4dIoD9::UserImage(uint8_t ui){
   UserImage(ui, 0x7fff, 0x7fff);
 }
 
 void GFX4dIoD9::UserImage(uint8_t ui, int altx, int alty){
-  if(userImag){
-  String resultFO = "Success. ";
-  } else {
+  if(!userImag){
   return;
   }
-  boolean even;
   boolean setemp = sEnable;
   ScrollEnable(false);
-  int gciapos = (ui) * 12;
-  uint32_t tuiIndex;
-  int16_t tuix;
-  int16_t tuiy;
-  tuiIndex = gciobj[gciapos] << 24;
-  tuiIndex = tuiIndex + (gciobj[gciapos + 1] << 16);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 2] << 8);
-  tuiIndex = tuiIndex + gciobj[gciapos + 3];
-  userImag.seek(tuiIndex);
-  uint16_t iwidth = (userImag.read() << 8); iwidth = iwidth + userImag.read();
-  uint16_t iheight = (userImag.read() << 8); iheight =  iheight + userImag.read();
-  uint16_t coldepth = (userImag.read() << 8); coldepth = coldepth + userImag.read();
-  tuix = gciobj[gciapos + 4] << 8;
-  tuix = tuix + gciobj[gciapos + 5];
-  tuiy = gciobj[gciapos + 6] << 8;
-  tuiy = tuiy + gciobj[gciapos + 7];
-  uimage = true;
+  int gciapos = (ui) * 13;
   if(altx == 0x7fff && alty == 0x7fff){
-  DrawWidget(tuiIndex, tuix, tuiy, iwidth, iheight, 0, 0);
+  DrawWidget(tuiIndex[ui], tuix[ui], tuiy[ui], tuiw[ui], tuih[ui], 0, 0, false, cdv[ui]);
   } else {
-  DrawWidget(tuiIndex, altx, alty, iwidth, iheight, 0, 0);
+  DrawWidget(tuiIndex[ui], altx, alty, tuiw[ui], tuih[ui], 0, 0, false, cdv[ui]);
   }
   ScrollEnable(setemp);
 }
@@ -958,57 +868,23 @@ void GFX4dIoD9::LedDigitsDisplay(int16_t newval, uint16_t index, int16_t Digits,
 }
 
 void GFX4dIoD9::UserImages(uint8_t uisnb, int16_t framenb){  
-  uimage = false;
   boolean setemp = sEnable;
   ScrollEnable(false);
-  int gciapos = (uisnb) * 12;
-  uint32_t tuiIndex;
-  int16_t tuix;
-  int16_t tuiy;
-  uint16_t tuiw;
-  uint16_t tuih;
-  tuiIndex = (gciobj[gciapos] << 24);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 1] << 16);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 2] << 8);
-  tuiIndex = tuiIndex + gciobj[gciapos + 3];
-  tuix = gciobj[gciapos + 4] << 8;
-  tuix = tuix + gciobj[gciapos + 5];
-  tuiy = gciobj[gciapos + 6] << 8;
-  tuiy = tuiy + gciobj[gciapos + 7];
-  tuiw = gciobj[gciapos + 8] << 8;
-  tuiw = tuiw + gciobj[gciapos + 9];
-  tuih = gciobj[gciapos + 10] << 8;
-  tuih = tuih + gciobj[gciapos + 11];
   if(framenb > (gciobjframes[uisnb] -1) || framenb < 0){
-  outofrange(tuix, tuiy, tuiw, tuih);
+  outofrange(tuix[uisnb], tuiy[uisnb], tuiw[uisnb], tuih[uisnb]);
   } else {
-  DrawWidget(tuiIndex, tuix, tuiy, tuiw, tuih, framenb, 0);
+  DrawWidget(tuiIndex[uisnb], tuix[uisnb], tuiy[uisnb], tuiw[uisnb], tuih[uisnb], framenb, 0, true, cdv[uisnb]);
   }
   ScrollEnable(setemp);
 }
 
 void GFX4dIoD9::UserImages(uint8_t uis, int16_t frame, int offset, int16_t altx, int16_t alty){  
-  uimage = false; 
   boolean setemp = sEnable;
   ScrollEnable(false);
-  int gciapos = (uis) * 12;
-  uint32_t tuiIndex;
-  int16_t tuix;
-  int16_t tuiy;
-  int16_t tuiw;
-  int16_t tuih;
-  tuiIndex = (gciobj[gciapos] << 24);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 1] << 16);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 2] << 8);
-  tuiIndex = tuiIndex + gciobj[gciapos + 3];
-  tuiw = gciobj[gciapos + 8] << 8;
-  tuiw = tuiw + gciobj[gciapos + 9];
-  tuih = gciobj[gciapos + 10] << 8;
-  tuih = tuih + gciobj[gciapos + 11];
   if(frame > (gciobjframes[uis]- 1) || frame < 0){
-  outofrange(tuix, tuiy, tuiw, tuih);
+  outofrange(altx, alty, tuiw[uis], tuih[uis]);
   } else {
-  DrawWidget(tuiIndex, altx, alty, tuiw, tuih, frame, offset);
+  DrawWidget(tuiIndex[uis], altx, alty, tuiw[uis], tuih[uis], frame, offset, true, cdv[uis]);
   }
   ScrollEnable(setemp);
 }
@@ -1040,54 +916,21 @@ void GFX4dIoD9::UserImages(uint8_t uisnb, int16_t framenb, int16_t newx, int16_t
   uimage = false;  
   boolean setemp = sEnable;
   ScrollEnable(false);
-  int gciapos = (uisnb) * 12;
-  uint32_t tuiIndex;
-  int16_t tuix = newx;
-  int16_t tuiy = newy;
-  int16_t tuiw;
-  int16_t tuih;
-  tuiIndex = (gciobj[gciapos] << 24);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 1] << 16);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 2] << 8);
-  tuiIndex = tuiIndex + gciobj[gciapos + 3];
-  tuiw = gciobj[gciapos + 8] << 8;
-  tuiw = tuiw + gciobj[gciapos + 9];
-  tuih = gciobj[gciapos + 10] << 8;
-  tuih = tuih + gciobj[gciapos + 11];
   if(framenb > (gciobjframes[uisnb] -1) || framenb < 0){
-  outofrange(tuix, tuiy, tuiw, tuih);
+  outofrange(tuix[uisnb], tuiy[uisnb], tuiw[uisnb], tuih[uisnb]);
   } else {
-  DrawWidget(tuiIndex, tuix, tuiy, tuiw, tuih, framenb, 0);
+  DrawWidget(tuiIndex[uisnb], tuix[uisnb], tuiy[uisnb], tuiw[uisnb], tuih[uisnb], framenb, 0, true, cdv[uisnb]);
   }
   ScrollEnable(setemp);
 }
 
-void GFX4dIoD9::UserImages(uint8_t uis, int16_t frame, int offset){  
-  uimage = false; 
+void GFX4dIoD9::UserImages(uint8_t uis, int16_t frame, int offset){   
   boolean setemp = sEnable;
   ScrollEnable(false);
-  int gciapos = (uis) * 12;
-  uint32_t tuiIndex;
-  int16_t tuix;
-  int16_t tuiy;
-  int16_t tuiw;
-  int16_t tuih;
-  tuiIndex = (gciobj[gciapos] << 24);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 1] << 16);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 2] << 8);
-  tuiIndex = tuiIndex + gciobj[gciapos + 3];
-  tuix = gciobj[gciapos + 4] << 8;
-  tuix = tuix + gciobj[gciapos + 5];
-  tuiy = gciobj[gciapos + 6] << 8;
-  tuiy = tuiy + gciobj[gciapos + 7];
-  tuiw = gciobj[gciapos + 8] << 8;
-  tuiw = tuiw + gciobj[gciapos + 9];
-  tuih = gciobj[gciapos + 10] << 8;
-  tuih = tuih + gciobj[gciapos + 11];
   if(frame > (gciobjframes[uis]- 1) || frame < 0){
-  outofrange(tuix, tuiy, tuiw, tuih);
+  outofrange(tuix[uis], tuiy[uis], tuiw[uis], tuih[uis]);
   } else {
-  DrawWidget(tuiIndex, tuix, tuiy, tuiw, tuih, frame, offset);
+  DrawWidget(tuiIndex[uis], tuix[uis], tuiy[uis], tuiw[uis], tuih[uis], frame, offset, true, cdv[uis]);
   }
   ScrollEnable(setemp);
 }
@@ -1116,20 +959,19 @@ void GFX4dIoD9::PrintImageFile(String ifile){
   }
   iwidth = (dataFile.read() << 8); iwidth = iwidth + dataFile.read();
   iheight = (dataFile.read() << 8); iheight =  iheight + dataFile.read();
-  uint16_t coldepth = (dataFile.read() << 8); coldepth = coldepth + dataFile.read();
+  uint8_t mul = dataFile.read() / 8;
+  uint8_t dummy = dataFile.read();
   uint8_t tempfsh = fsh;
+  uint32_t pos = 6;
   uint16_t isize = iwidth * iheight;
-  uint16_t ichunk = iwidth / 2;
-  uint16_t isteps = iheight / 4;
-  uint16_t irem = iheight - (isteps * 4);
+  uint16_t ichunk = iwidth << (mul - 1);
+  uint8_t buf[width << (mul - 1)];
   if(rotation == 0 || rotation == 1 || sEnable == false){
   if(((cursor_y + iheight) - 1) > height - 1){
   iheight = iheight - ((cursor_y + iheight) - height);
   }
   }
   boolean off = false;
-  boolean even = false;
-  if((iwidth % 2) == 0) even = true;
   int cuiw = iwidth; 
   if((cursor_x + iwidth - 1) >= width){
   cuiw = iwidth - ((cursor_x + iwidth - 1) - width) - 1;
@@ -1144,22 +986,13 @@ void GFX4dIoD9::PrintImageFile(String ifile){
   setGRAM(cursor_x, cursor_y - 1 , cursor_x + cuiw -1 , cursor_y - 1);
   }
   if(off){
-  for(uint16_t pc = 0; pc < iwidth; pc ++){
-  uint16_t tempc = (dataFile.read() << 8); tempc = tempc + dataFile.read() ;
-  if((cursor_x + pc) < width){
-  WrGRAM16(tempc);
-  }
-  }
+  dataFile.read(buf, cuiw << (mul - 1));
+  WrGRAMs8(buf, cuiw << (mul - 1), mul);
+  pos = pos + (iwidth << (mul - 1));
+  dataFile.seek(pos);
   } else {
-  for(uint16_t pc = 0; pc < ichunk; pc ++){
-  uint32_t tempc =dataFile.read() << 24; tempc = tempc + (dataFile.read() << 16);
-  tempc = tempc + (dataFile.read() << 8); tempc = tempc + dataFile.read() ;
-  WrGRAM(tempc);
-  }
-  if(even == false){
-  uint16_t tempco = (dataFile.read() << 8); tempco = tempco + dataFile.read() ;
-  WrGRAM16(tempco);
-  }
+  dataFile.read(buf, ichunk);
+  WrGRAMs8(buf, ichunk, mul);
   }
   }
   if(tempnl){
@@ -1169,14 +1002,22 @@ void GFX4dIoD9::PrintImageFile(String ifile){
 }
 
 void GFX4dIoD9::PrintImageWifi(String Address, uint16_t port, String hfile){
-  ImageWifi(true, Address, port, hfile);
+  ImageWifi(true, Address, port, hfile, "");
 }
 
 void GFX4dIoD9::PrintImageWifi(String WebAddr){
-  ImageWifi(false, WebAddr, 0, "");
+  ImageWifi(false, WebAddr, 0, "", "");
 }
 
-void GFX4dIoD9::ImageWifi(boolean local, String Address, uint16_t port, String hfile){
+void GFX4dIoD9::PrintImageWifi(String Address, uint16_t port, String hfile, String sha1){
+  ImageWifi(true, Address, port, hfile, sha1);
+}
+
+void GFX4dIoD9::PrintImageWifi(String WebAddr, String sha1){
+  ImageWifi(false, WebAddr, 0, "", sha1);
+}
+
+void GFX4dIoD9::ImageWifi(boolean local, String Address, uint16_t port, String hfile, String sha1){
   if(cursor_x >= (width - 1)) return;
   boolean tempnl = false;
   if(nl){
@@ -1185,51 +1026,62 @@ void GFX4dIoD9::ImageWifi(boolean local, String Address, uint16_t port, String h
   }
   HTTPClient http;
   if(local){
-  http.begin(Address,port,hfile);
-  Cls();
+  if(sha1 == ""){
+  if(!http.begin(Address,port,hfile)) return;
   } else {
-  http.begin(Address);
+  if(!http.begin(Address,port,hfile,sha1)) return;
   }
+  } else {
+  if(sha1 == ""){
+  if(!http.begin(Address)) return;
+  } else {
+  if(!http.begin(Address,sha1)) return;
+  }
+  }
+  yield();
   int httpCode = http.GET();
+  yield();
   if(httpCode == 404){
   println("File Error");
   return;
   }
+  yield();
   uint16_t iwidth;
   uint16_t iheight;   
-  uint16_t coldepth; 
+  uint16_t coldepth;
+  int mul = 2; 
   uint32_t len = http.getSize();
-  uint8_t buff[2] = { 0 };
+  yield();
+  uint8_t buff[6] = { 0 };
   WiFiClient * stream = http.getStreamPtr();
   size_t size = stream->available();
+  if(size < 1) return;
   int c = stream->readBytes(buff, ((size > sizeof(buff)) ? sizeof(buff) : size));
-  uint8_t c0 = buff[0]; uint8_t c1 = buff[1];
-  iwidth = (c0 << 8); iwidth = iwidth + c1;
-  c = stream->readBytes(buff, ((size > sizeof(buff)) ? sizeof(buff) : size));
-  c0 = buff[0];c1 = buff[1];
-  iheight = (c0 << 8); iheight = iheight + c1;
-  c = stream->readBytes(buff, ((size > sizeof(buff)) ? sizeof(buff) : size));
-  c0 = buff[0];c1 = buff[1];
-  coldepth = (c0 << 8); coldepth = coldepth + c1;
+  yield();
+  size = size - c;
+  if(size < 1) return;
+  iwidth = (buff[0] << 8) + buff[1];
+  iheight = (buff[2] << 8) + buff[3];
+  mul = buff[4] / 8;
   uint8_t tempfsh = fsh;
-  uint32_t isize = iwidth * iheight;
-  uint16_t ichunk = iwidth / 2;
-  uint16_t isteps = iheight / 4;
-  uint16_t irem = iheight - (isteps * 4);
   if(rotation == 0 || rotation == 1 || sEnable == false){
   if(((cursor_y + iheight) - 1) > height - 1){
   iheight = iheight - ((cursor_y + iheight) - height);
   }
   }
   boolean off = false;
-  boolean even = false;
-  if((iwidth % 2) == 0) even = true;
-  int cuiw = iwidth; 
+  int cuiw = iwidth;
+  int tbufsize = 0; 
   if((cursor_x + iwidth - 1) >= width){
   cuiw = iwidth - ((cursor_x + iwidth - 1) - width) - 1;
   off = true;
+  tbufsize = (iwidth - cuiw) << (mul - 1);
   }
+  uint8_t tbuf[tbufsize];
+  int bufsize = cuiw << (mul - 1);
+  uint8_t buf[bufsize];
   for(int idraw = 0; idraw < iheight; idraw ++){
+  yield();
   nl = true;
   newLine(1, 1, cursor_x);
   if((cursor_y - 1) < 0){
@@ -1238,21 +1090,12 @@ void GFX4dIoD9::ImageWifi(boolean local, String Address, uint16_t port, String h
   setGRAM(cursor_x, cursor_y - 1 , cursor_x + cuiw -1 , cursor_y - 1);
   }
   if(off){
-  for(uint16_t pc = 0; pc < iwidth; pc ++){
-  c = stream->readBytes(buff, ((size > sizeof(buff)) ? sizeof(buff) : size));
-  uint16_t tempc = (buff[0] << 8); tempc = tempc + buff[1] ;
-  if((cursor_x + pc) < width){
-  WrGRAM16(tempc);
-  }
-  }
+  c = stream->readBytes(buf, bufsize);
+  c = stream->readBytes(tbuf, tbufsize);
+  WrGRAMs8(buf, bufsize, mul);
   } else {
-  for(uint16_t pc = 0; pc < ichunk; pc ++){
-  c = stream->readBytes(buff, ((size > sizeof(buff)) ? sizeof(buff) : size));
-  uint32_t tempc =buff[0] << 24; tempc = tempc + (buff[1] << 16);
-  c = stream->readBytes(buff, ((size > sizeof(buff)) ? sizeof(buff) : size));
-  tempc = tempc + (buff[0] << 8); tempc = tempc + buff[1] ;
-  WrGRAM(tempc);
-  }
+  c = stream->readBytes(buf, bufsize);
+  WrGRAMs8(buf, bufsize, mul);
   }
   }
   if(tempnl){
@@ -1260,21 +1103,24 @@ void GFX4dIoD9::ImageWifi(boolean local, String Address, uint16_t port, String h
   lastfsh = 1;
   }
 }
+
 uint8_t GFX4dIoD9::getNumberofObjects(void){
   return gciobjnum;
 }
 
 void GFX4dIoD9::Close4dGFX(){
   userImag.close();
+  gciobjnum = 0;
 }
 
 void GFX4dIoD9::Open4dGFX(String file4d){
+  if(userImag) Close4dGFX();
   uint8_t um;
   uint8_t strpos = 0;
   uint8_t gotchar = 0;
   uint8_t ofset = 0;
-  int gciobjcount = 0;
   gciobjnum = 0;
+  imageTouchEnable(-1, false);
   String inputString;
   dat4d = file4d + ".dat";
   gci4d = file4d + ".gci";
@@ -1297,19 +1143,13 @@ void GFX4dIoD9::Open4dGFX(String file4d){
   if(c == char(13)){ 
   strpos = 0;
   String tempis = inputString;
-  uint32_t tuiIndex = getIndexfromString(tempis, (2 + ofset)); 
-  gciobj[gciobjcount] = tuiIndex >> 24;  
-  gciobj[gciobjcount + 1] = (tuiIndex >> 16) & 0xff;
-  gciobj[gciobjcount + 2] = (tuiIndex >> 8) & 0xff;
-  gciobj[gciobjcount + 3] = tuiIndex & 0xff;  
+  uint32_t tuindex = getIndexfromString(tempis, (2 + ofset)); 
+  tuiIndex[gciobjnum] = tuindex;
   uint32_t tuiPos = getCoordfromString(tempis, (12 + ofset));
-  gciobj[gciobjcount + 4] = xic >> 8;
-  gciobj[gciobjcount + 5] = xic & 0xff;
-  gciobj[gciobjcount + 6] = yic >> 8 & 0xff;
-  gciobj[gciobjcount + 7] = yic & 0xff;
+  tuix[gciobjnum] = xic;
+  tuiy[gciobjnum] = yic;
   inputString = "";
   strpos = 0;
-  gciobjcount = gciobjcount + 12;
   gciobjnum = gciobjnum + 1;
   }
   }  
@@ -1317,22 +1157,14 @@ void GFX4dIoD9::Open4dGFX(String file4d){
   userDat.close();
   userImag = SD.open(gci4d);
   uint32_t tIndex;
-  int twi;
-  int thi;
-  int objarray;
   int coldepth;
   for(int n = 0; n < gciobjnum; n ++){
-  objarray = n * 12;
-  tIndex = gciobj[objarray] << 24;
-  tIndex = tIndex + (gciobj[objarray + 1] << 16);
-  tIndex = tIndex + (gciobj[objarray + 2] << 8);
-  tIndex = tIndex + gciobj[objarray + 3];
+  tIndex = tuiIndex[n];
   userImag.seek(tIndex);
-  gciobj[objarray + 8] = userImag.read();
-  gciobj[objarray + 9] = userImag.read();
-  gciobj[objarray + 10] = userImag.read();
-  gciobj[objarray + 11] = userImag.read();
-  coldepth = (userImag.read() << 8) + userImag.read();
+  tuiw[n] = (userImag.read() << 8) + userImag.read();
+  tuih[n] = (userImag.read() << 8) + userImag.read();
+  cdv[n] = userImag.read();
+  coldepth = userImag.read();
   gciobjframes[n] = (userImag.read() << 8) + userImag.read();
   }
 }
@@ -1522,136 +1354,6 @@ void GFX4dIoD9::newLine(int8_t f1, int8_t ts, uint16_t ux){
   }  
   }
 }
-/*
-void GFX4dIoD9::newLine(int8_t f1, int8_t ts, uint16_t ux){
-  fsh1 = f1;
-  nl = false;
-  int tcy2;
-  uint8_t remspc = ts * fsh1;
-  if(rotation != 2 && rotation != 3){
-  cursor_y += remspc;
-  if(cursor_y > 239) cursor_y = 239;
-  cursor_x  = ux;
-  return;
-  }
-  if(rotation == 2 || rotation == 3){
-  uint16_t offset = 0;
-  if(scrolled == false){
-  if((cursor_y + remspc )< 320){
-  cursor_y += textsizeht * fsh1;
-  cursor_x  = ux;
-  return;
-  }
-  }
-  if(scrolled){
-  uint16_t diff = ts * fsh1;
-  int16_t tempy = scrollOffset;
-  for(int16_t sn = 0; sn < diff + 1; sn++){
-  delay(ssSpeed);  
-
-  if(rotation == 3){
-  tcy2 = 320 - scrollOffset;
-  } else { 
-  tcy2 = scrollOffset;
-  }
-  int tcy21 = tcy2 - 1;
-  if(tcy21 < 0){
-  tcy21 = tcy21 + 320;
-  }
-  if(textbgcolor != textcolor){  
-  Hline(0, tcy2, 240, textbgcolor);
-  Hline(0, tcy21, 240, textbgcolor);
-  } else {
-  Hline(0, tcy2, 240, BLACK);
-  Hline(0, tcy21, 240, BLACK);
-  }
-  
-  if(rotation == 2){
-  if((tempy + sn) > 319){ 
-  Scroll(tempy + sn - 320);
-  } else {
-  Scroll(tempy + sn);
-  }
-  }
-  if(rotation == 3){
-  if((tempy - sn) < 0){ 
-  Scroll(320 - tempy - sn);
-  } else {
-  Scroll(tempy - sn);
-  }
-  }
-  offset = sn; 
-  }
-  if(rotation == 2){
-  cursor_y = tempy;
-  if(cursor_y > 319){
-  cursor_y = cursor_y - 320;
-  }
-  }
-  if(rotation == 3){
-  cursor_y = 320 - tempy;
-  if(cursor_y > 319){
-  cursor_y = cursor_y - 320;
-  }
-  }
-  cursor_x  = ux;
-  }
-  if(scrolled == false){
-  if((cursor_y + remspc) > 319){
-  setScrollArea(0, 0);
-  int16_t diff = remspc;
-  int16_t tempy = scrollOffset;
-  for(int16_t sn = 0; sn < diff + 1; sn++){
-  delay(ssSpeed); 
-
-  if(rotation == 3){
-  tcy2 = 320 - scrollOffset;
-  } else { 
-  tcy2 = scrollOffset;
-  }
-  int tcy21 = tcy2 - 1;
-  if(tcy21 < 0){
-  tcy21 = tcy21 + 320;
-  }
-  if(textbgcolor != textcolor){  
-  Hline(0, tcy2, 240, textbgcolor);
-  Hline(0, tcy21, 240, textbgcolor);
-  } else {
-  Hline(0, tcy2, 240, BLACK);
-  Hline(0, tcy21, 240, BLACK);
-  }
-
-  if(rotation == 2){
-  if((tempy + sn) > 319){ 
-  Scroll(tempy + sn - 320);
-  } else {
-  Scroll(tempy + sn);
-  }
-  }
-  if(rotation == 3){
-  if((tempy - sn) < 0){ 
-  Scroll(320 - tempy - sn);
-  } else {
-  Scroll(tempy - sn);
-  }
-  }
-  offset = sn;  
-  }
-  if(rotation == 2){
-  cursor_y = tempy;
-  }
-  if(rotation == 3){
-  cursor_y = 319 - tempy + 1;
-  }
-  if(cursor_y > 319){
-  cursor_y = cursor_y - 320;
-  }
-  cursor_x = ux;
-  }
-  }  
-  }
-}
-*/ 
 
 size_t GFX4dIoD9::write(uint8_t c) {
   if(nl){
@@ -1796,10 +1498,26 @@ void GFX4dIoD9::TWtextcolor(uint16_t twc){
   twcolnum = twc;
   }
 
+boolean GFX4dIoD9::TWMoveTo(uint8_t twcrx, uint8_t twcry){
+  if(twcrx <= chracc && twcry <= chrdwn && chracc > 0 && chrdwn > 0){
+  twcurx = txtx + ((fsw +1) * twcrx);
+  twcury = txty + (fsh * twcry);
+  twxpos = twcrx;
+  twypos = twcry;
+  return true;
+  } else {
+  return false;
+  }
+}
+
+void GFX4dIoD9::TWprintAt(uint8_t pax, uint8_t pay, String istr){
+  if(TWMoveTo(pax, pay)){
+  TWprint(istr);
+  }
+}
+
 void GFX4dIoD9::TWwrite(const char txtinput){
   drawChar2tw(twcurx, twcury, 0, txtf, txtb, 1);
-  uint16_t chracc = txtw / (fsw +1);
-  uint8_t chrdwn = txth / fsh;
   int apos;
   boolean skip2 = false;
   if(txtinput > 31){
@@ -1906,16 +1624,22 @@ void GFX4dIoD9::TWwrite(const char txtinput){
   twypos --;
   RectangleFilled(twcurx, twcury, twcurx + (txtw - 1) - 1, twcury + 16, txtb);
   }
-  drawChar2tw(twcurx, twcury, 63, txtf, txtb, 1);
+  if(twcurson) drawChar2tw(twcurx, twcury, 63, txtf, txtb, 1);
 }
 
 void GFX4dIoD9::TWcls(){
   RectangleFilled(txtx - 3, txty - 3, (txtx - 3) + (txtw + 2) - 1, (txty - 3) + (txth + 2) - 1, txtb);
   twcurx = txtx;
   twcury = txty;
+  twxpos = 0;
+  twypos = 0;
   for(int n = 0; n < sizeof(txtbuf); n ++){
   txtbuf[n] = 0;
   }
+}
+
+void GFX4dIoD9::TWcursorOn(bool twco){
+  twcurson = twco;
 }
 
 void GFX4dIoD9::TWcolor(uint16_t fcol){
@@ -1930,6 +1654,9 @@ void GFX4dIoD9::TWcolor(uint16_t fcol, uint16_t bcol){
 }
 
 void GFX4dIoD9::TextWindow(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t txtcolor, uint16_t txbcolor, uint16_t frcolor){
+  for(int n = 0; n < 600; n ++){
+  txtbuf[n] = 0;
+  }
   if(w < 24) w = 24;
   if(h < 31) h = 31;
   if(x < 0) x = 0;
@@ -1951,6 +1678,8 @@ void GFX4dIoD9::TextWindow(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t 
   twtext = "";
   twframe = true;
   twframecol = frcolor;
+  chracc = txtw / (fsw + 1);
+  chrdwn = txth / fsh;
   PanelRecessed(x, y, w, h, frcolor);
   RectangleFilled(x + 3, y + 3, (x + 3) + (w - 6) - 1, (y + 3) + (h - 6) - 1, txbcolor);    
 }
@@ -1983,6 +1712,9 @@ void GFX4dIoD9::TextWindowRestore(){
 }
 
 void GFX4dIoD9::TextWindow(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t txtcolor, uint16_t txbcolor){
+  for(int n = 0; n < 600; n ++){
+  txtbuf[n] = 0;
+  }
   if(w < 22) w = 22;
   if(h < 29) h = 29;
   if(x < 0) x = 0;
@@ -2003,6 +1735,8 @@ void GFX4dIoD9::TextWindow(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t 
   txth = h - 6; 
   twtext = "";  
   twframe = false;
+  chracc = txtw / (fsw + 1);
+  chrdwn = txth / fsh;
   RectangleFilled(x, y, x + w - 1, y + h - 1, txbcolor);    
 }
 
@@ -2140,6 +1874,39 @@ void GFX4dIoD9::WrGRAMs16(uint16_t *data, uint16_t l) {
   while(l--){
   tdw = *data++;
   SPI.write16(tdw, true);
+  }
+  digitalWrite(_cs, HIGH);
+  SPI.endTransaction();
+}
+
+void GFX4dIoD9::WrGRAMs8(uint8_t *data, uint16_t l, byte mul) {
+  uint32_t tdw;
+  uint16_t tdy;
+  SPI.beginTransaction(spiSettings);
+  digitalWrite(_dc, HIGH);  
+  digitalWrite(_cs, LOW);
+  while(l){
+  if(mul == 2){
+  if(l >= 4){
+  tdw = (*data++ << 24) + (*data++ << 16) + (*data++ << 8) + *data++;
+  l-= 4;
+  SPI.write32(tdw);
+  } else {
+  tdy = (*data++ << 8) + *data++;
+  l-= 2;
+  SPI.write16(tdy);
+  }
+  } else {
+  if(l >= 2){
+  tdw = (RGB3322565[*data++] << 16) + RGB3322565[*data++];
+  l-= 2;
+  SPI.write32(tdw);
+  } else {
+  tdy = RGB3322565[*data++];
+  l-= 1;
+  SPI.write16(tdy);
+  }
+  }
   }
   digitalWrite(_cs, HIGH);
   SPI.endTransaction();
@@ -2557,14 +2324,75 @@ void GFX4dIoD9::ButtonActive(uint8_t butno, boolean act){
   bactive[butno] = act;
 }
 
-void GFX4dIoD9::DeleteButton(uint8_t hndl){
+void GFX4dIoD9::DeleteButton(int hndl){
+  if(hndl > 0){
   RectangleFilled(bposx[hndl], bposy[hndl], bposx[hndl] + bposw[hndl] - 1, bposy[hndl] + bposh[hndl] - 1, bposc[hndl]);
   bactive[hndl] = false;
+  } else {
+  for(int n = 0; n > 128; n++){
+  RectangleFilled(bposx[n], bposy[n], bposx[n] + bposw[n] - 1, bposy[n] + bposh[n] - 1, bposc[n]);
+  bactive[n] = false;
+  }
+  }
 }
 
-void GFX4dIoD9::DeleteButton(uint8_t hndl, uint16_t color){
+void GFX4dIoD9::DeleteButton(int hndl, uint16_t color){
+  if(hndl > 0){
   RectangleFilled(bposx[hndl], bposy[hndl], bposx[hndl] + bposw[hndl] - 1, bposy[hndl] + bposh[hndl] - 1, color);
   bactive[hndl] = false;
+  } else {
+  for(int n = 0; n > 128; n++){
+  RectangleFilled(bposx[n], bposy[n], bposx[n] + bposw[n] - 1, bposy[n] + bposh[n] - 1, color);
+  bactive[n] = false;
+  }
+  }
+}
+
+void GFX4dIoD9::Orbit(int angle, int lngth, int *oxy){
+  float sx = cos((angle - 90) * 0.0174532925);
+  float sy = sin((angle - 90) * 0.0174532925);
+  oxy[0] = (int)(sx * lngth + cursor_x);
+  oxy[1] = (int)(sy * lngth + cursor_y);
+}
+
+void GFX4dIoD9::DeleteButtonBG(int hndl, int objBG){
+  if(hndl > 0){
+  UserImageDR(objBG, bposx[hndl], bposy[hndl], bposw[hndl], bposh[hndl], bposx[hndl], bposy[hndl]);
+  bactive[hndl] = false;
+  } else {
+  for(int n = 0; n > 128; n++){
+  UserImageDR(objBG, bposx[n], bposy[n], bposw[n], bposh[n], bposx[n], bposy[n]);
+  bactive[n] = false;
+  }
+  }
+}
+
+void GFX4dIoD9::UserImageHide(int hndl){
+  UserImageHide(hndl, BLACK);
+}
+
+void GFX4dIoD9::UserImageHide(int hndl, uint16_t color){
+  if(hndl > 0){
+  RectangleFilled(tuix[hndl], tuiy[hndl], tuiw[hndl], tuih[hndl], color);
+  imageTouchEnable(hndl, false);
+  } else {
+  for(int n = 0; n > 200; n++){
+  RectangleFilled(tuix[n], tuiy[n], tuiw[n], tuih[n], color);
+  imageTouchEnable(n, false);
+  }
+  }
+}
+
+void GFX4dIoD9::UserImageHideBG(int hndl, int objBG){
+  if(hndl > 0){
+  UserImageDR(objBG, tuix[hndl], tuiy[hndl], tuiw[hndl], tuih[hndl], tuix[hndl], tuiy[hndl]);
+  imageTouchEnable(hndl, false);
+  } else {
+  for(int n = 0; n > 200; n++){
+  UserImageDR(objBG, tuix[n], tuiy[n], tuiw[n], tuih[n], tuix[n], tuiy[n]);
+  imageTouchEnable(n, false);
+  }
+  }
 }
 
 uint16_t GFX4dIoD9::RGBto565(uint8_t rc, uint8_t gc, uint8_t bc) {
@@ -2582,7 +2410,6 @@ void GFX4dIoD9::Orientation(uint8_t m) {
   case 2:
   digitalWrite(_dc, HIGH);
   digitalWrite(_cs, LOW);
-  //SPI.write(0x48);
   SPI.write(MADCTL_MX | MADCTL_MY | MADCTL_RGB);
   digitalWrite(_cs, HIGH);   
   width  = GFX4dIoD9_TFTWIDTH;
@@ -2594,8 +2421,6 @@ void GFX4dIoD9::Orientation(uint8_t m) {
   case 0:
   digitalWrite(_dc, HIGH);
   digitalWrite(_cs, LOW);
-  //SPI.write(0x28);
-  //SPI.write(0x40 | 0x80 | 0x08);
   SPI.write(MADCTL_MY | MADCTL_MV | MADCTL_RGB);
   digitalWrite(_cs, HIGH); 
   width  = GFX4dIoD9_TFTHEIGHT;
@@ -2607,7 +2432,6 @@ void GFX4dIoD9::Orientation(uint8_t m) {
   case 3:
   digitalWrite(_dc, HIGH);
   digitalWrite(_cs, LOW);
-  //SPI.write(0x88);
   SPI.write(MADCTL_RGB);  
   digitalWrite(_cs, HIGH); 
   width  = GFX4dIoD9_TFTWIDTH;
@@ -2619,7 +2443,6 @@ void GFX4dIoD9::Orientation(uint8_t m) {
   case 1:
   digitalWrite(_dc, HIGH);
   digitalWrite(_cs, LOW);
-  //SPI.write(0xE8);
   SPI.write(MADCTL_MX | MADCTL_MV | MADCTL_RGB);
   digitalWrite(_cs, HIGH); 
   width  = GFX4dIoD9_TFTHEIGHT;
@@ -2682,11 +2505,6 @@ void GFX4dIoD9::SetData(uint8_t * data, uint8_t size) {
 
 void GFX4dIoD9::BacklightOn(boolean bl) {
   boolean bld = bl;
-  //if(bl){  
-  //digitalWrite(_disp, HIGH);
-  //} else {
-  //digitalWrite(_disp, LOW);
-  //}
 }
 
 int16_t GFX4dIoD9::getHeight(void) {
@@ -2785,193 +2603,122 @@ void GFX4dIoD9::UserCharacter(uint32_t *data, uint8_t ucsize, int16_t ucx, int16
   }
 }
 
-void GFX4dIoD9::UserImageDR(uint8_t ui, uint16_t uxpos, uint16_t uypos, uint16_t uwidth, uint16_t uheight, uint16_t tuix, uint16_t tuiy){
+void GFX4dIoD9::UserImageDR(uint8_t ui, uint16_t uxpos, uint16_t uypos, uint16_t uwidth, uint16_t uheight, uint16_t uix, uint16_t uiy){
   if(uxpos >= width || uypos >= height || uxpos < 0 || uypos < 0) return;
   if((uxpos + uwidth - 1) < 0 || (uypos + uheight - 1) < 0) return;
   if((uxpos + uwidth - 1) > width || (uypos + uheight - 1) > height) return;
   boolean setemp = sEnable;
   ScrollEnable(false);
-  int gciapos = (ui) * 12;
+  int gciapos = (ui) * 13;
   uint32_t bgoff;
-  uint32_t tuiIndex;
-  tuiIndex = gciobj[gciapos] << 24;
-  tuiIndex = tuiIndex + (gciobj[gciapos + 1] << 16);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 2] << 8);
-  tuiIndex = tuiIndex + gciobj[gciapos + 3];
   if(userImag){
   String resultFO = "Success. ";
   } else {
   return;
   }
-  userImag.seek(tuiIndex);
-  uint16_t iwidth = (userImag.read() << 8); iwidth = iwidth + userImag.read();
-  uint16_t iheight = (userImag.read() << 8); iheight =  iheight + userImag.read();
-  uint16_t coldepth = (userImag.read() << 8); coldepth = coldepth + userImag.read();
-  if(uxpos + uwidth > iwidth){
-  uwidth = iwidth - uxpos;
+  userImag.seek(tuiIndex[ui] + 4);
+  if(uxpos + uwidth > tuiw[ui]){
+  uwidth = tuiw[ui] - uxpos;
   }
-  if(uypos + uheight > iheight){
-  uheight = iheight - uypos;
+  if(uypos + uheight > tuih[ui]){
+  uheight = tuih[ui] - uypos;
   }
-  if(uwidth % 2){
-  uwidth = uwidth - 1;
-  }
-  if(uheight % 2){
-  uheight = uheight - 1;
-  } 
   if(uwidth < 2 || uheight < 2){
   return;
   }
-  uint16_t left = 0;
-  uint32_t uoff = (((uypos * iwidth) + uxpos) * 2);
-  uint16_t cpos;
-  uint32_t isize = (iwidth * iheight);
+  byte mul = 2;
+  uint32_t isize = tuiw[ui] * tuih[ui];
   uint32_t isize2 = uwidth * uheight;
-  bgoff = tuiIndex + 6 + uoff + 0;
+  uint32_t uoff;
+  if(cdv[ui] == 8)  mul = 1;
+  uoff = ((uypos * tuiw[ui]) + uxpos) << (mul - 1);
+  bgoff = tuiIndex[ui] + 6 + uoff + 0;
   userImag.seek(bgoff);
-  uint32_t ichunk = isize2 / 2;
-  uint32_t cbuff[500];
-  cpos = 0;
-  setGRAM(tuix, tuiy, tuix + uwidth  -1, tuiy + uheight -1);
-  for(uint32_t idraw = 0; idraw < ichunk; idraw ++){
-  uint32_t tempc =userImag.read() << 24; tempc = tempc + (userImag.read() << 16);
-  tempc = tempc + (userImag.read() << 8); tempc = tempc + userImag.read() ;
-  cbuff[cpos] = tempc;
-  cpos++;
-  left++;
-  left++;
-  if(left > (uwidth - 1)){
-  left = 0;
-  bgoff = bgoff + ((iwidth) * 2);
-  userImag.seek(bgoff + (left * 2));
+  uint32_t ichunk = isize2 << (mul - 1);
+  uint16_t steps = ichunk / (uwidth << (mul - 1));
+  int bufsize = uwidth << (mul - 1);
+  uint8_t buf[bufsize];
+  setGRAM(uix, uiy, uix + uwidth  -1, uiy + uheight -1);
+  for(int n = 0; n < steps; n++){
+  userImag.read(buf, bufsize);
+  WrGRAMs8(buf, bufsize, mul);
+  bgoff = bgoff + (tuiw[ui] << (mul - 1));
+  userImag.seek(bgoff);
   }
-  if(cpos == 500){
-  WrGRAMs(cbuff, cpos);
-  cpos = 0;
-  }
-  }  
-  if(cpos > 0){
-  WrGRAMs(cbuff, cpos);  
-  }
-  ScrollEnable(setemp);
 }
 
 void GFX4dIoD9::UserImagesDR(uint8_t uino, int frames, uint16_t uxpos, uint16_t uypos, uint16_t uwidth, uint16_t uheight){
-  if(uxpos >= width || uypos >= height || uxpos < 0 || uypos < 0) return;
+ if(uxpos >= width || uypos >= height || uxpos < 0 || uypos < 0) return;
   if((uxpos + uwidth - 1) < 0 || (uypos + uheight - 1) < 0) return;
   if((uxpos + uwidth - 1) > width || (uypos + uheight - 1) > height) return;
   uint32_t bgoff;
   boolean setemp = sEnable;
   ScrollEnable(false);
-  int gciapos = (uino) * 12;
-  uint32_t tuiIndex;
-  uint16_t tuix;
-  uint16_t tuiy;
-  uint16_t tuiw;
-  uint16_t tuih;
-  uint8_t cdv;
-  tuiIndex = (gciobj[gciapos] << 24);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 1] << 16);
-  tuiIndex = tuiIndex + (gciobj[gciapos + 2] << 8);
-  tuiIndex = tuiIndex + gciobj[gciapos + 3];
-  userImag.seek(tuiIndex + 4);
-  cdv = userImag.read();
-  tuix = gciobj[gciapos + 4] << 8;
-  tuix = tuix + gciobj[gciapos + 5];
-  tuiy = gciobj[gciapos + 6] << 8;
-  tuiy = tuiy + gciobj[gciapos + 7];
-  tuiw = gciobj[gciapos + 8] << 8;
-  tuiw = tuiw + gciobj[gciapos + 9];
-  tuih = gciobj[gciapos + 10] << 8;
-  tuih = tuih + gciobj[gciapos + 11];
-  if(uxpos + uwidth > tuiw){
-  uwidth = tuiw - uxpos;
+  if(uxpos + uwidth > tuiw[uino]){
+  uwidth = tuiw[uino] - uxpos;
   }
-  if(uypos + uheight > tuih){
-  uheight = tuih - uypos;
+  if(uypos + uheight > tuih[uino]){
+  uheight = tuih[uino] - uypos;
   }
-  if(uwidth % 2){
-  uwidth = uwidth - 1;
-  }
-  if(uheight % 2){
-  uheight = uheight - 1;
-  } 
   if(uwidth < 2 || uheight < 2){
   return;
   }
   if(!userImag){
   return;
   }
-  uint16_t top = 0;
-  uint16_t left = 0;
-  uint16_t pix1;
-  uint16_t cpos;
-  uint16_t bc;
-  uint32_t isize = tuiw * tuih;
-  uint16_t isize2 = uwidth * uheight;
+  byte mul = 2;
+  uint32_t isize = tuiw[uino] * tuih[uino];
+  uint32_t isize2 = uwidth * uheight;
   uint32_t pos;
   uint32_t uoff;
-  if(cdv == 8){
-  pos = (isize * frames);
-  uoff = ((uypos * tuiw) + uxpos);
-  } else {
-  pos = (isize * frames) * 2;
-  uoff = (((uypos * tuiw) + uxpos) * 2);
-  }
-  bgoff = tuiIndex + 8 + pos + uoff + 0;
+  if(cdv[uino] == 8)  mul = 1;
+  pos = (isize * frames) << (mul - 1);
+  uoff = ((uypos * tuiw[uino]) + uxpos) << (mul - 1);
+  bgoff = tuiIndex[uino] + 8 + pos + uoff + 0;
   userImag.seek(bgoff);
-  uint32_t ichunk = isize2 / 2;
-  uint32_t cbuff[500];
-  uint32_t tempc;
-  cpos = 0;
+  uint32_t ichunk = isize2 << (mul - 1);
+  uint16_t steps = ichunk / (uwidth << (mul - 1));
+  int bufsize = uwidth << (mul - 1);
+  uint8_t buf[bufsize];
   if(frames > (gciobjframes[uino]- 1) || frames < 0){
-  outofrange(tuix + uxpos, tuiy + uypos, uwidth, uheight);
+  outofrange(tuix[uino] + uxpos, tuiy[uino] + uypos, uwidth, uheight);
   ScrollEnable(setemp);
   return;
   }
-  setGRAM(tuix + uxpos, tuiy + uypos, tuix + uxpos + uwidth  -1, tuiy + uypos + uheight -1);
-  for(uint32_t idraw = 0; idraw < ichunk; idraw ++){
-  if(cdv == 8){
-  tempc = RGB3322565[userImag.read()] << 16;
-  tempc = tempc + RGB3322565[userImag.read()]; 
-  } else {
-  tempc = userImag.read() << 24; tempc = tempc + (userImag.read() << 16);
-  tempc = tempc + (userImag.read() << 8); tempc = tempc + userImag.read() ;
-  }
-  cbuff[cpos] = tempc;
-  cpos++;
-  left++;
-  left++;
-  if(left > (uwidth - 1)){
-  left = 0;
-  if(cdv == 8){
-  bgoff = bgoff + ((tuiw));
-  userImag.seek(bgoff + (left));
-  } else {
-  bgoff = bgoff + ((tuiw) * 2);
-  userImag.seek(bgoff + (left * 2));
-  }
-  }
-  if(cpos == 500){
-  WrGRAMs(cbuff, cpos);
-  cpos = 0;
-  }
-  }  
-  if(cpos > 0){ 
-  WrGRAMs(cbuff, cpos); 
+  setGRAM(tuix[uino] + uxpos, tuiy[uino] + uypos, tuix[uino] + uxpos + uwidth  -1, tuiy[uino] + uypos + uheight -1);
+  for(int n = 0; n < steps; n++){
+  userImag.read(buf, bufsize);
+  WrGRAMs8(buf, bufsize, mul);
+  bgoff = bgoff + (tuiw[uino] << (mul - 1));
+  userImag.seek(bgoff);
   }
   ScrollEnable(setemp);
 } 
 
 void GFX4dIoD9::UserCharacterBG(uint32_t *data, uint8_t ucsize, uint16_t ucx, uint16_t ucy, uint16_t color, boolean draw, uint32_t bgindex) {
-  if(!dataFile){
+  UserCharacterBG(data, ucsize, ucx, ucy, color, draw, bgindex, true, 0);
+}
+
+void GFX4dIoD9::UserCharacterBG(int8_t ui, uint32_t *data, uint8_t ucsize, uint16_t ucx, uint16_t ucy, uint16_t color, boolean draw) {
+  UserCharacterBG(data, ucsize, ucx, ucy, color, draw, tuiIndex[ui], false, ui);
+}
+
+void GFX4dIoD9::UserCharacterBG(uint32_t *data, uint8_t ucsize, uint16_t ucx, uint16_t ucy, uint16_t color, boolean draw, uint32_t bgindex, bool type, int8_t ui) {
+  if((!dataFile && type) || (!userImag && !type)){
   return;
   }
   if(ucx < 0 || ucy < 0) return;
+  uint16_t bwidth;
+  uint16_t bheight;
+  if(type){
   dataFile.seek(bgindex);
-  uint16_t bwidth = (dataFile.read() << 8) + dataFile.read();
-  uint16_t bheight = (dataFile.read() << 8) + dataFile.read();
-  uint32_t bgoff = bgindex + 6 + (((ucy * bwidth) + ucx) * 2);
+  bwidth = (dataFile.read() << 8) + dataFile.read();
+  bheight = (dataFile.read() << 8) + dataFile.read();
+  } else {
+  bwidth = tuiw[ui];
+  bheight = tuih[ui];
+  }
+  uint32_t bgoff = bgindex + 6 + (((ucy * bwidth) + ucx) << 1);
   uint8_t top = 0;
   uint8_t left = 0;
   uint32_t tdw;
@@ -2982,7 +2729,7 @@ void GFX4dIoD9::UserCharacterBG(uint32_t *data, uint8_t ucsize, uint16_t ucx, ui
   tdw = *data++;
   uint8_t ucheight = tdw;
   if((ucx + ucwidth - 1) > (width - 1) || (ucy + ucheight - 1) > (height - 1)) return; 
-  uint16_t ucloop = (ucwidth * ucheight) / 2;
+  uint16_t ucloop = (ucwidth * ucheight) >> 1;
   setGRAM(ucx, ucy, ucx + ucwidth - 1, ucy + ucheight - 1);
   uint32_t test = 2 ^ (ucwidth - 1);
   uint32_t test2 = 0;
@@ -2993,21 +2740,31 @@ void GFX4dIoD9::UserCharacterBG(uint32_t *data, uint8_t ucsize, uint16_t ucx, ui
   if(test2 == 1 && draw){
   pix1 = color;
   } else {
-  dataFile.seek(bgoff + (left * 2));
+  if(type){
+  dataFile.seek(bgoff + (left << 1));
   pix1 = (dataFile.read() << 8) + dataFile.read();
+  } else {
+  userImag.seek(bgoff + (left << 1));
+  pix1 = (userImag.read() << 8) + userImag.read();
+  }
   }
   left++;
   test2 = (tdw >> (ucwidth - 1) - left) & 0x1;
   if(test2 == 1 && draw){
   pix2 = color;
   } else {
-  dataFile.seek(bgoff + (left * 2));
+  if(type){
+  dataFile.seek(bgoff + (left << 1));
   pix2 = (dataFile.read() << 8) + dataFile.read();
+  } else {
+  userImag.seek(bgoff + (left << 1));
+  pix2 = (userImag.read() << 8) + userImag.read();
+  }
   }
   left++;
   if(left > (ucwidth - 1)){
   left = 0;
-  bgoff = bgoff + (bwidth * 2);
+  bgoff = bgoff + (bwidth << 1);
   tdw = *data++;
   uint32_t test = 2 ^ (ucwidth - 1);
   }
@@ -3017,11 +2774,15 @@ void GFX4dIoD9::UserCharacterBG(uint32_t *data, uint8_t ucsize, uint16_t ucx, ui
 }
 
 void GFX4dIoD9::DownloadFile(String WebAddr, String Fname){   
-  Download(WebAddr, 0, "", Fname);
+  Download(WebAddr, 0, "", Fname, "");
+}
+
+void GFX4dIoD9::DownloadFile(String WebAddr, String Fname, String sha1){   
+  Download(WebAddr, 0, "", Fname, sha1);
 }
 
 void GFX4dIoD9::DownloadFile(String Address, uint16_t port, String hfile, String Fname){   
-  Download(Address, port, hfile, Fname);
+  Download(Address, port, hfile, Fname, "");
 }
 
 boolean GFX4dIoD9::CheckSD(void){
@@ -3032,7 +2793,7 @@ boolean GFX4dIoD9::CheckDL(void){
   return dlok;
 }
 
-void GFX4dIoD9::Download(String Address, uint16_t port, String hfile, String Fname){   
+void GFX4dIoD9::Download(String Address, uint16_t port, String hfile, String Fname, String sha1){   
   dlok = false;
   int cstream;
   File Dwnload;
@@ -3040,7 +2801,11 @@ void GFX4dIoD9::Download(String Address, uint16_t port, String hfile, String Fna
   if(port > 0){
   http.begin(Address,port,hfile);
   } else {
+  if(sha1 == ""){
   http.begin(Address);
+  } else {
+  http.begin(Address, sha1);
+  }
   }
   int httpCode = http.GET();
   if(httpCode == 404){

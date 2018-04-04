@@ -11,6 +11,11 @@
 #######################################
 
 GFX4dIoD9	KEYWORD1
+UserImageHideBG	KEYWORD1
+UserImageHide	KEYWORD1
+DeleteButtonBG	KEYWORD1
+DeleteButton	KEYWORD1
+Orbit	KEYWORD1
 CheckDL	KEYWORD2
 CheckSD	KEYWORD2
 GetCommand	KEYWORD2
@@ -23,6 +28,8 @@ XYposToDegree	KEYWORD2
 Ellipse	KEYWORD2
 EllipseFilled	KEYWORD2
 Buttonx	KEYWORD2
+imageTouched	KEYWORD2
+imageTouchEnable	KEYWORD2
 LedDigitsDisplaySigned	KEYWORD2
 LedDigitsDisplay	KEYWORD2
 UserImage	KEYWORD2
@@ -33,7 +40,10 @@ TWcls	KEYWORD2
 TWcolor	KEYWORD2
 TWprint	KEYWORD2
 TWprintln	KEYWORD2
+TWprintAt	KEYWORD2
 TWwrite	KEYWORD2
+TWMoveTo	KEYWORD2
+TWcursorOn	KEYWORD2
 TextWindow	KEYWORD2
 TextWindowRestore	KEYWORD2
 PanelRecessed	KEYWORD2
@@ -41,10 +51,14 @@ Panel	KEYWORD2
 ButtonDown	KEYWORD2
 ButtonUp	KEYWORD2
 ButtonActive	KEYWORD2
-DeleteButton	KEYWORD2
 Buttonx		KEYWORD2
 CheckButtons	KEYWORD2
 DownloadFile	KEYWORD2
+touch_GetX	KEYWORD2
+touch_GetY	KEYWORD2
+touch_GetPen	KEYWORD2
+touch_Update	KEYWORD2
+touch_Set	KEYWORD2
 getScrollOffset	KEYWORD2
 WrGRAMs	KEYWORD2
 UserCharacterBG	KEYWORD2
