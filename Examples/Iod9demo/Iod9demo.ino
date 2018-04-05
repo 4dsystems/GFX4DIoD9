@@ -8,8 +8,8 @@
 #include "ESP8266WiFi.h"
 #include "GFX4dIoD9.h"
 
-const char* ssid = "SKY93627";
-const char* password = "SBSPFFXX";
+const char* ssid = "********";
+const char* password = "********";
 
 GFX4dIoD9 gfx = GFX4dIoD9();
 
@@ -87,16 +87,15 @@ uint16_t n;
 
 
 void setup() {
-
+  Serial.begin(38400);
   gfx.begin();
   gfx.Cls();
   gfx.ScrollEnable(true);
-  gfx.BacklightOn(true);
+  //gfx.BacklightOn(true);
   gfx.Orientation(LANDSCAPE);
   gfx.SmoothScrollSpeed(5);
   gfx.TextColor(WHITE); gfx.Font(2);  gfx.TextSize(1);
   gfx.TextWindow(0, 0, 162, 90, ORANGE, BLACK);
-
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   delay(100);
@@ -192,14 +191,17 @@ void setup() {
     gfx.TWprintln("Systems");
     delay(1000);
     gfx.MoveTo(0,0);
-    gfx.PrintImageWifi("http://www.4dsystems.com.au/downloads/RAW/iod9.gci");
+    gfx.PrintImageWifi("http://hosting.4dsystems.com.au/IoDFiles/iod9.gci");
     delay(4000);
     gfx.Cls();
-  }
-  gfx.Open4dGFX("iod9");
+    }
+    gfx.Open4dGFX("iod9");
+    gfx.TWcolor(WHITE);
 }
 
 void loop() {
+
+ 
   gfx.Cls();
   gfx.TextWindowRestore();
     delay(1000);
@@ -344,6 +346,7 @@ break;
   }
     gfx.Orientation(LANDSCAPE);
 gfx.TextColor(WHITE);
+
 }
 
 String ipToString(IPAddress ip){
