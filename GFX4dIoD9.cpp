@@ -919,7 +919,7 @@ void GFX4dIoD9::UserImages(uint8_t uisnb, int16_t framenb, int16_t newx, int16_t
   if(framenb > (gciobjframes[uisnb] -1) || framenb < 0){
   outofrange(tuix[uisnb], tuiy[uisnb], tuiw[uisnb], tuih[uisnb]);
   } else {
-  DrawWidget(tuiIndex[uisnb], tuix[uisnb], tuiy[uisnb], tuiw[uisnb], tuih[uisnb], framenb, 0, true, cdv[uisnb]);
+  DrawWidget(tuiIndex[uisnb], newx, newy, tuiw[uisnb], tuih[uisnb], framenb, 0, true, cdv[uisnb]);
   }
   ScrollEnable(setemp);
 }
