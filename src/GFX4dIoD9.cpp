@@ -226,8 +226,8 @@ GFX4dIoD9::GFX4dIoD9(){
     curdisp   = 0;
 }
 
-SPISettings spiSettings = SPISettings(39900000, MSBFIRST, SPI_MODE0);
-
+SPISettings spiSettings = SPISettings(79000000, MSBFIRST, SPI_MODE0);
+SPISettings spiSettingsD = SPISettings(39900000, MSBFIRST, SPI_MODE0);
 
 void GFX4dIoD9::begin() {
  
@@ -238,7 +238,7 @@ void GFX4dIoD9::begin() {
   pinMode(_cs, OUTPUT);
   yield();
   SPI.begin();
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   SetCommand(GFX4dIoD9_SLPOUT);
   delay(20);
   delay(10);
@@ -293,7 +293,19 @@ void GFX4dIoD9::begin() {
   BFA = 160;
   Cls(0);
   Orientation(0);
+  #ifndef USE_FS
+  #ifndef ESP32
+  #ifdef SDFS_H
+  if(SD.begin(_sd, spiSettings)){
+  #else
   if(SD.begin(_sd, 79000000)){
+  #endif
+  #else
+  if(SD.begin(_sd, SPI, 79000000)){
+  #endif
+  #else
+  if(SPIFFS.begin()){
+  #endif
   sdok = true;
   } else {
   sdok = false;
@@ -651,7 +663,7 @@ void GFX4dIoD9::Circle(int16_t xc, int16_t yc, int16_t r, uint16_t color) {
   }
 }
 
-void GFX4dIoD9::PrintImage(uint8_t ui){
+void GFX4dIoD9::PrintImage(uint16_t ui){
   if(cursor_x > (width - 1)) return;
   boolean tempnl = false;
   if(nl){
@@ -771,10 +783,30 @@ void GFX4dIoD9::DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw
   rem = isize - (steps * bufsize);
   }
   uint8_t buf[bufsize];
+  #ifndef ESP8266
+  uint16_t pc = 0;
+  #endif
   if(steps > 0){
   for(int n = 0; n < steps; n++){
+  #ifndef ESP32
   userImag.read(buf, bufsize);
   WrGRAMs8(buf, bufsize, mul);
+  #else
+  userImag.read(buf, bufsize);
+  if(mul == 2){
+  for(int b = 0; b < bufsize; b += 2){
+  buf16[pc] = (buf[b] << 8) | buf[b + 1];
+  pc ++;
+  if(pc == 12000){
+  WrGRAMs16(buf16, pc << 1);
+  //WrGRAMs16232(buf16, pc);
+  pc = 0;
+  } 
+  }
+  } else {
+  WrGRAMs8(buf, bufsize, mul);
+  }
+  #endif
   if(off == true){
   pos = pos + (uiw << (mul - 1));
   userImag.seek(Index + ofst + pos);
@@ -783,15 +815,37 @@ void GFX4dIoD9::DrawWidget(uint32_t Index, int16_t uix, int16_t uiy, int16_t uiw
   }
   if(rem > 0){
   userImag.read(buf, rem);
+  #ifndef ESP32
+  WrGRAMs8(buf, rem, mul);
+  #else
+  if(mul == 2){
+  for(int b = 0; b < rem; b += 2){
+  buf16[pc] = (buf[b] << 8) | buf[b + 1];
+  pc ++;
+  if(pc == 12000){
+  WrGRAMs16(buf16, pc << 1);
+  //WrGRAMs16232(buf16, pc);
+  pc = 0;
+  } 
+  }
+  } else {
   WrGRAMs8(buf, rem, mul);
   }
+  #endif
+  }
+  #ifndef ESP8266
+  if(pc > 0 && mul == 2){
+  WrGRAMs16(buf16, pc << 1);
+  //WrGRAMs16232(buf16, pc);
+  }
+  #endif
 }
 
-void GFX4dIoD9::UserImage(uint8_t ui){
+void GFX4dIoD9::UserImage(uint16_t ui){
   UserImage(ui, 0x7fff, 0x7fff);
 }
 
-void GFX4dIoD9::UserImage(uint8_t ui, int altx, int alty){
+void GFX4dIoD9::UserImage(uint16_t ui, int altx, int alty){
   if(!userImag){
   return;
   }
@@ -844,7 +898,8 @@ void GFX4dIoD9::LedDigitsDisplay(int16_t newval, uint16_t index, int16_t Digits,
 }
 
 void GFX4dIoD9::LedDigitsDisplay(int16_t newval, uint16_t index, int16_t Digits, int16_t MinDigits, int16_t WidthDigit, int16_t LeadingBlanks, int16_t altx, int16_t alty){
-  int16_t i, k, l, lb;
+  int16_t i, k, lb;
+  int32_t l;
   l = 1;
   for(i = 1; i < Digits; i++)
   l *= 10;
@@ -867,7 +922,7 @@ void GFX4dIoD9::LedDigitsDisplay(int16_t newval, uint16_t index, int16_t Digits,
   }
 }
 
-void GFX4dIoD9::UserImages(uint8_t uisnb, int16_t framenb){  
+void GFX4dIoD9::UserImages(uint16_t uisnb, int16_t framenb){  
   boolean setemp = sEnable;
   ScrollEnable(false);
   if(framenb > (gciobjframes[uisnb] -1) || framenb < 0){
@@ -878,7 +933,7 @@ void GFX4dIoD9::UserImages(uint8_t uisnb, int16_t framenb){
   ScrollEnable(setemp);
 }
 
-void GFX4dIoD9::UserImages(uint8_t uis, int16_t frame, int offset, int16_t altx, int16_t alty){  
+void GFX4dIoD9::UserImages(uint16_t uis, int16_t frame, int offset, int16_t altx, int16_t alty){  
   boolean setemp = sEnable;
   ScrollEnable(false);
   if(frame > (gciobjframes[uis]- 1) || frame < 0){
@@ -912,7 +967,7 @@ void GFX4dIoD9::outofrange(int16_t euix, int16_t euiy, int16_t euiw, int16_t eui
   Line(cuix + cuiw - 2, cuiy + 1, cuix + 1, cuiy + cuih - 2, RED); 
 }
 
-void GFX4dIoD9::UserImages(uint8_t uisnb, int16_t framenb, int16_t newx, int16_t newy){  
+void GFX4dIoD9::UserImages(uint16_t uisnb, int16_t framenb, int16_t newx, int16_t newy){  
   uimage = false;  
   boolean setemp = sEnable;
   ScrollEnable(false);
@@ -924,7 +979,7 @@ void GFX4dIoD9::UserImages(uint8_t uisnb, int16_t framenb, int16_t newx, int16_t
   ScrollEnable(setemp);
 }
 
-void GFX4dIoD9::UserImages(uint8_t uis, int16_t frame, int offset){   
+void GFX4dIoD9::UserImages(uint16_t uis, int16_t frame, int offset){   
   boolean setemp = sEnable;
   ScrollEnable(false);
   if(frame > (gciobjframes[uis]- 1) || frame < 0){
@@ -953,7 +1008,11 @@ void GFX4dIoD9::PrintImageFile(String ifile){
   if(cursor_y > (height - 1) && (rotation == 2 || rotation == 3 || sEnable == false)) return;
   uint16_t iwidth;
   uint16_t iheight; 
+  #ifndef USE_FS
   dataFile = SD.open(ifile);
+  #else
+  dataFile = SPIFFS.open((char*)ifile.c_str(), "r");
+  #endif
   if(!dataFile){
   return;
   }
@@ -1029,13 +1088,17 @@ void GFX4dIoD9::ImageWifi(boolean local, String Address, uint16_t port, String h
   if(sha1 == ""){
   if(!http.begin(Address,port,hfile)) return;
   } else {
+  #ifndef ESP32
   if(!http.begin(Address,port,hfile,sha1)) return;
+  #endif
   }
   } else {
   if(sha1 == ""){
   if(!http.begin(Address)) return;
   } else {
+  #ifndef ESP32
   if(!http.begin(Address,sha1)) return;
+  #endif
   }
   }
   yield();
@@ -1104,7 +1167,7 @@ void GFX4dIoD9::ImageWifi(boolean local, String Address, uint16_t port, String h
   }
 }
 
-uint8_t GFX4dIoD9::getNumberofObjects(void){
+uint16_t GFX4dIoD9::getNumberofObjects(void){
   return gciobjnum;
 }
 
@@ -1421,6 +1484,41 @@ void GFX4dIoD9::drawChar2(int16_t x, int16_t y, unsigned char c, uint16_t color,
 }
 
 void GFX4dIoD9::drawChar2tw(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t size) {
+  if((x >= width)||(y >= height)||((x + (8 + 1) * size - 1) < 0)||((y + 16 * size - 1) < 0)){  
+  return;
+  }
+  if(c < 32 && c > 128){
+  return;
+  }
+  uint16_t temppix[257];
+  uint16_t pc = 0;
+  uint32_t tfval;
+  setGRAM(x, y, x + 7, y + 15);
+  uint8_t trow = 0x80;
+  uint8_t chb;    
+  uint16_t c2pos = c * 16;
+  for (uint8_t j = 0; j < 16; j++ ) {
+  chb = font2[c2pos + j]; 
+  for (uint8_t i = 0; i < 8; i++){
+  if (chb & trow){ 
+  temppix[pc] = color;
+  } else {
+  temppix[pc] = bg;
+  }  
+  chb <<= 1;
+  pc ++;
+  }
+  trow = 0x80;
+  }
+  #ifndef ESP8266
+  WrGRAMs16(temppix, 256);
+  #else
+  WrGRAMs16232(temppix, 128);
+  #endif
+}
+
+/*
+void GFX4dIoD9::drawChar2tw(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t size) {
   if((x >= width)||(y >= height)||((x + (fsw + 1) * size - 1) < 0)||((y + fsh * size - 1) < 0)){  
   return;
   }
@@ -1444,9 +1542,8 @@ void GFX4dIoD9::drawChar2tw(int16_t x, int16_t y, unsigned char c, uint16_t colo
   trow = 0x80;
   }
 }
-
+*/
 void GFX4dIoD9::drawChar1tw(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t size) {
- 
   if((x >= width)||(y >= height)||((x + (fsw + 1) * size - 1) < 0)||((y + fsh * size - 1) < 0)){  
   return;
   }
@@ -1456,18 +1553,29 @@ void GFX4dIoD9::drawChar1tw(int16_t x, int16_t y, unsigned char c, uint16_t colo
   setGRAM(x, y, x + 4, y + 7);
   uint8_t trow = 0x01;
   uint8_t chb; 
-  uint8_t chb1;   
+  uint8_t chb1;
+  uint16_t temppix[40];
+  uint8_t pc = 0;  
   for (uint8_t j = 0; j < 8; j++ ) { 
   for (uint8_t i = 0; i < 5; i++){
   chb = font1[(c * 5) + i]; 
   chb1 = chb >> j;  
   if (chb1 & trow){ 
-  WrGRAM16(color);
+  temppix[pc] = color;
+  //WrGRAM16(color);
   } else {
-  WrGRAM16(bg);
-  }  
+  temppix[pc] = bg;
+  //WrGRAM16(bg);
+  }
+  pc ++;  
   }
   }
+  #ifndef ESP8266
+  WrGRAMs16(temppix, 160);
+  #else
+  WrGRAMs16232(temppix, 80);
+  //WrGRAMs16(temppix, 128);
+  #endif
 }
 
 void GFX4dIoD9::TWprintln(String istr){
@@ -1490,13 +1598,14 @@ void GFX4dIoD9::TWprint(String istr){
 }
 
 String GFX4dIoD9::GetCommand(){
-  return cmdtxt;
+  String tcmdtxt = cmdtxt;
   cmdtxt = "";
+  return tcmdtxt;
 }
 
 void GFX4dIoD9::TWtextcolor(uint16_t twc){
   twcolnum = twc;
-  }
+}
 
 boolean GFX4dIoD9::TWMoveTo(uint8_t twcrx, uint8_t twcry){
   if(twcrx <= chracc && twcry <= chrdwn && chracc > 0 && chrdwn > 0){
@@ -1518,14 +1627,13 @@ void GFX4dIoD9::TWprintAt(uint8_t pax, uint8_t pay, String istr){
 
 void GFX4dIoD9::TWwrite(const char txtinput){
   drawChar2tw(twcurx, twcury, 0, txtf, txtb, 1);
-  int apos;
   boolean skip2 = false;
   if(txtinput > 31){
   twtext = twtext + char(txtinput);
   drawChar2tw(twcurx, twcury, txtinput - 32, twcolnum, txtb, 1);
   txtbuf[(chracc * twypos) + twxpos] = txtinput;
   txfcol[(chracc * twypos) + twxpos] = twcolnum;
-  twcurx = twcurx + fsw + 1;
+  twcurx = twcurx + 9;
   twxpos ++;
   if((twcurx + 8 + 1) > (txtw + txtx)){
   twcury = twcury + 16;
@@ -1541,7 +1649,8 @@ void GFX4dIoD9::TWwrite(const char txtinput){
   tcnt = tcnt + 14;
   if(tcnt > ccpos){
   for(int o = 0; o < (tcnt - ccpos); o++){
-  twcurx = twcurx + (8 + 1);
+  twtext = twtext + char(32);
+  twcurx = twcurx + 9;
   twxpos ++;
   txtbuf[(chracc * twypos) + twxpos] = 32; // 8 + 2
   txfcol[(chracc * twypos) + twxpos] = twcolnum;
@@ -1741,12 +1850,17 @@ void GFX4dIoD9::TextWindow(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t 
 }
 
 void GFX4dIoD9::drawChar1(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t sizew, uint8_t sizeht){
+  int crad;
+  int co;
+  if(fstyle == 1 || fstyle == 2 || fstyle == 3) crad = sizew >> 1;
+  if(fstyle == DOTMATRIXLED) co = crad * 68 / 100;
+  if(sizew > 3)crad --;
   if(rotation != 3 && rotation != 2){
   if((x >= width) || (y >= height) || ((x + (fsw + 1) * sizew - 1) < 0) || ((y + fsh * sizeht - 1) < 0)){
   return;
   }
   }
-  for (int8_t i = 0; i < (5); i++ ) {
+  for (int8_t i = 0; i < 6; i++ ) {
   uint8_t tcol;
   if (i == (fsw)){ 
   tcol = 0x0;
@@ -1754,20 +1868,38 @@ void GFX4dIoD9::drawChar1(int16_t x, int16_t y, unsigned char c, uint16_t color,
   tcol = font1[(c * 5) + i];
   }
   for (int8_t j = 0; j < 8; j++) {
+  if (i == 5) tcol = 0;
   if (tcol & 0x1) {
   if (sizew == 1 && sizeht == 1){
-  if(y + j > 159 && (rotation == 3 || rotation == 2)){
-  PutPixel(x + i, y + j - 160, color);
+  if(y + j > 319 && (rotation == 3 || rotation == 2)){
+  PutPixel(x + i, y + j - 320, color);
   } else {
   PutPixel(x + i, y + j, color);
   }
   } else { 
-  RectangleFilled(x + (i * sizew), y + (j * sizeht), (sizew + x) + (i * sizew) - 1, (sizeht + y) + (j * sizeht) - 1, color); 
+  if(fstyle == 0)RectangleFilled(x + (i * sizew), y + (j * sizeht), (sizew + x) + (i * sizew) - 1, (sizeht + y) + (j * sizeht) - 1, color); 
+  if(fstyle == 2)Circle(x + (i * sizew) + crad, y + (j * sizeht) + crad, crad, color);
+  if(fstyle == 1)CircleFilled(x + (i * sizew) + crad, y + (j * sizeht) + crad, crad, color);
+  if(fstyle == 3){
+  CircleFilled(x + (i * sizew) + crad, y + (j * sizeht) + crad, crad, color);  
+  CircleFilled(x + (i * sizew) + co, y + (j * sizeht) + co, crad/3, WHITE);
+  }
+  if(fstyle == 4)RectangleFilled(x + (i * sizew), y + (j * sizeht), (sizew + x) + (i * sizew) - 2, (sizeht + y) + (j * sizeht) - 2, color); 
+  if(fstyle == 5){
+  uint16_t fadcol = color;
+  fadcol = HighlightColors(fadcol, 10) & 0xffff; 
+  int step = 60/(sizew / 2);
+  if(step < 1) step = 1;
+  for(int n = sizew / 2; n > -1; n --){
+  Rectangle(x + (i * sizew) + n, y + (j * sizeht) + n, (sizew + x) + (i * sizew) - 1 - n, (sizeht + y) + (j * sizeht) - 1 - n, fadcol); 
+  /*if(!(n % step))*/fadcol = HighlightColors(fadcol, step) >> 16; 
+  }
+  }
   }
   } else if (bg != color) {
   if (sizew == 1 && sizeht == 1){
-  if(y + j > 159 && (rotation == 3 || rotation == 2)){
-  PutPixel(x + i, y + j - 160, bg);
+  if(y + j > 319 && (rotation == 3 || rotation == 2)){
+  PutPixel(x + i, y + j - 320, bg);
   } else {
   PutPixel(x + i, y + j, bg);
   }
@@ -1815,6 +1947,11 @@ void GFX4dIoD9::Arc( int16_t x0, int16_t y0, int16_t r, uint8_t sa, uint16_t col
 }
 
 void GFX4dIoD9::setGRAM(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
+  sgx = x0;
+  sgy = y0;
+  sgw = x1 - x0 + 1;
+  sgh = y1 - y0 + 1;
+  SPI.setClockDivider(SPI_CLOCK_DIV4);
   digitalWrite(_cs, LOW);
   uint32_t casCoord = ((x0 + cofset) << 16) + (x1 + cofset);
   uint32_t pasCoord = ((y0 + rofset) << 16) + (y1 + rofset);
@@ -1833,6 +1970,11 @@ void GFX4dIoD9::setGRAM(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
 }
 
 void GFX4dIoD9::setGRAM_(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
+  sgx = x0;
+  sgy = y0;
+  sgw = x1 - x0 + 1;
+  sgh = y1 - y0 + 1;
+  SPI.setClockDivider(SPI_CLOCK_DIV4);
   uint32_t casCoord = ((x0 + cofset) << 16) + (x1 + cofset);
   uint32_t pasCoord = ((y0 + rofset) << 16) + (y1 + rofset);
   digitalWrite(_dc, LOW);
@@ -1849,32 +1991,44 @@ void GFX4dIoD9::setGRAM_(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
 }
 
 void GFX4dIoD9::WrGRAM(uint32_t color) {
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   digitalWrite(_dc, HIGH);  
   digitalWrite(_cs, LOW);
+  #ifndef ESP32 
   SPI.write32(color, true);
+  #else
+  SPI.write32(color);
+  #endif
   digitalWrite(_cs, HIGH);
   SPI.endTransaction();
 }
 
 void GFX4dIoD9::WrGRAM16(uint16_t color) {
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   digitalWrite(_dc, HIGH);  
   digitalWrite(_cs, LOW);
+  #ifndef ESP32
   SPI.write16(color, true);
+  #else
+  SPI.write16(color);
+  #endif
   digitalWrite(_cs, HIGH);
   SPI.endTransaction();
 }
 
 void GFX4dIoD9::WrGRAMs16(uint16_t *data, uint16_t l) {
   uint32_t tdw;
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   digitalWrite(_dc, HIGH);  
   digitalWrite(_cs, LOW);
+  #ifndef ESP32
   while(l--){
   tdw = *data++;
   SPI.write16(tdw, true);
   }
+  #else
+  SPI.writePixels(data, l);
+  #endif
   digitalWrite(_cs, HIGH);
   SPI.endTransaction();
 }
@@ -1882,11 +2036,12 @@ void GFX4dIoD9::WrGRAMs16(uint16_t *data, uint16_t l) {
 void GFX4dIoD9::WrGRAMs8(uint8_t *data, uint16_t l, byte mul) {
   uint32_t tdw;
   uint16_t tdy;
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   digitalWrite(_dc, HIGH);  
   digitalWrite(_cs, LOW);
   while(l){
   if(mul == 2){
+  #ifndef ESP32
   if(l >= 4){
   tdw = (*data++ << 24) + (*data++ << 16) + (*data++ << 8) + *data++;
   l-= 4;
@@ -1896,6 +2051,10 @@ void GFX4dIoD9::WrGRAMs8(uint8_t *data, uint16_t l, byte mul) {
   l-= 2;
   SPI.write16(tdy);
   }
+  #else
+  SPI.writeBytes(data, l);
+  l = 0;
+  #endif
   } else {
   if(l >= 2){
   tdw = (RGB3322565[*data++] << 16) + RGB3322565[*data++];
@@ -1912,32 +2071,18 @@ void GFX4dIoD9::WrGRAMs8(uint8_t *data, uint16_t l, byte mul) {
   SPI.endTransaction();
 }
 
-void GFX4dIoD9::WrGRAMs(uint32_t *data, uint16_t l, boolean even) {
-  uint32_t tdw;
-  if(!even) l--;
-  SPI.beginTransaction(spiSettings);
-  digitalWrite(_dc, HIGH);  
-  digitalWrite(_cs, LOW);
-  while(l--){
-  tdw = *data++;
-  SPI.write32(tdw, true);
-  }
-  if(!even){ 
-  tdw = *data++; 
-  SPI.write16(tdw, true);
-  }
-  digitalWrite(_cs, HIGH);
-  SPI.endTransaction();
-}
-
 void GFX4dIoD9::WrGRAMs(uint32_t *data, uint16_t l) {
   uint32_t tdw;
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   digitalWrite(_dc, HIGH);  
   digitalWrite(_cs, LOW);
   while(l--){
   tdw = *data++;
+  #ifndef ESP32
   SPI.write32(tdw, true);
+  #else
+  SPI.write32(tdw);
+  #endif
   }
   digitalWrite(_cs, HIGH);
   SPI.endTransaction();
@@ -1947,7 +2092,7 @@ void GFX4dIoD9::PutPixel(int16_t x, int16_t y, uint16_t color) {
   if((x < 0) || (x >= (width -1)) || (y < 0) || (y >= (height - 1))) {
   return;
   }
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   digitalWrite(_cs, LOW);
   uint32_t casCoord = ((x + cofset) << 16) + ((x + cofset) + 1);
   uint32_t pasCoord = ((y + rofset) << 16) + ((y + rofset) + 1);
@@ -1978,7 +2123,7 @@ void GFX4dIoD9::Vline(int16_t x, int16_t y, int16_t h, uint16_t vcolor) {
   y = 0;
   }
   if((y + h - 1) >= height)   h = height - y;
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   digitalWrite(_cs, LOW); 
   uint32_t casCoord = ((x + cofset) << 16) + (x + cofset);
   uint32_t pasCoord = ((y + rofset) << 16) + ((y + rofset) + h - 1);
@@ -1993,8 +2138,14 @@ void GFX4dIoD9::Vline(int16_t x, int16_t y, int16_t h, uint16_t vcolor) {
   digitalWrite(_dc, LOW);    
   SPI.write(GFX4dIoD9_RAMWR);
   digitalWrite(_dc, HIGH);
-  for(int vl = 0; vl < h; vl ++){
+  if(h < 2){
   SPI.write16(vcolor);
+  } else {
+  while(h > 0){
+  SPI.write32((vcolor << 16) | vcolor);
+  h -= 2;
+  }
+  if(h < 0) SPI.write16(vcolor);
   }
   digitalWrite(_cs, HIGH);
   SPI.endTransaction();
@@ -2011,7 +2162,7 @@ void GFX4dIoD9::Hline(int16_t x, int16_t y, int16_t w, uint16_t hcolor) {
   x = 0;
   }
   if ((x+w-1) >= width)  w = width-x;
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   digitalWrite(_cs, LOW); 
   uint32_t casCoord = ((x + cofset) << 16) + ((x + cofset) + w - 1);
   uint32_t pasCoord = ((y + rofset) << 16) + (y + rofset);
@@ -2026,9 +2177,16 @@ void GFX4dIoD9::Hline(int16_t x, int16_t y, int16_t w, uint16_t hcolor) {
   digitalWrite(_dc, LOW);    
   SPI.write(GFX4dIoD9_RAMWR);
   digitalWrite(_dc, HIGH);
-  for(int hl = 0; hl < w; hl ++){
+  if(w < 2){
   SPI.write16(hcolor);
-  }  
+  } else {
+  //WrGRAM16232(hcolor, w);
+  while(w > 0){
+  SPI.write32((hcolor << 16) | hcolor);
+  w -= 2;
+  }
+  if(w < 0) SPI.write16(hcolor);
+  }
   digitalWrite(_cs, HIGH);
   SPI.endTransaction();
 }
@@ -2075,7 +2233,7 @@ void GFX4dIoD9::RectangleFilled(int16_t x, int16_t y, int16_t x1, int16_t y1, ui
   }
   int w = x1 - x + 1;
   int h = y1 - y + 1;
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   digitalWrite(_cs, LOW);
   uint32_t casCoord = ((x + cofset) << 16) + ((x + cofset)+ w - 1);
   uint32_t pasCoord = ((y + rofset) << 16) + ((y + rofset) + h - 1);
@@ -2090,8 +2248,17 @@ void GFX4dIoD9::RectangleFilled(int16_t x, int16_t y, int16_t x1, int16_t y1, ui
   digitalWrite(_dc, LOW);    
   SPI.write(GFX4dIoD9_RAMWR);
   digitalWrite(_dc, HIGH);
-  uint8_t colorS[] = { (uint8_t) (color >> 8), (uint8_t) color };
-  SPI.writePattern(&colorS[0], 2, (w * h));
+  int32_t tpwh = w * h;
+  //WrGRAM16232(color, tpwh);
+  if(tpwh < 2){
+  SPI.write16(color);
+  } else {
+  while(tpwh > 0){
+  SPI.write32((color << 16) | color);
+  tpwh -= 2;
+  }
+  if(tpwh < 0) SPI.write16(color);
+  }
   digitalWrite(_cs, HIGH);
   SPI.endTransaction();
 }
@@ -2255,7 +2422,11 @@ uint16_t GFX4dIoD9::getScrolledY(uint16_t y){
 }
 
 uint32_t GFX4dIoD9::bevelColor(uint16_t colorb){
-  c565toRGBs(colorb);
+  return HighlightColors(colorb, 18);
+}
+
+uint32_t GFX4dIoD9::HighlightColors(uint16_t colorh, int step){
+  c565toRGBs(colorh);
   RGB2HLS();
   uint8_t oldred = GFX4dIoD9_RED;
   uint8_t oldgreen = GFX4dIoD9_GREEN;
@@ -2263,7 +2434,7 @@ uint32_t GFX4dIoD9::bevelColor(uint16_t colorb){
   uint8_t tl = l;
   uint8_t th = h;
   uint8_t ts = s;
-  HLS2RGB(th, tl - 18, ts);
+  HLS2RGB(th, tl - step, ts);
   if(GFX4dIoD9_RED > oldred){
   GFX4dIoD9_RED = 0;
   }
@@ -2274,7 +2445,7 @@ uint32_t GFX4dIoD9::bevelColor(uint16_t colorb){
   GFX4dIoD9_BLUE = 0;
   }
   uint16_t _dark = RGBs2COL(GFX4dIoD9_RED, GFX4dIoD9_GREEN, GFX4dIoD9_BLUE);
-  HLS2RGB(th, tl + 18, ts);
+  HLS2RGB(th, tl + step, ts);
   uint16_t _light = RGBs2COL(GFX4dIoD9_RED, GFX4dIoD9_GREEN, GFX4dIoD9_BLUE);
   uint32_t bevcol = (_dark << 16) + _light;
   return bevcol;
@@ -2376,7 +2547,7 @@ void GFX4dIoD9::UserImageHide(int hndl, uint16_t color){
   RectangleFilled(tuix[hndl], tuiy[hndl], tuiw[hndl], tuih[hndl], color);
   imageTouchEnable(hndl, false);
   } else {
-  for(int n = 0; n > 200; n++){
+  for(int n = 0; n > MAX_WIDGETS; n++){
   RectangleFilled(tuix[n], tuiy[n], tuiw[n], tuih[n], color);
   imageTouchEnable(n, false);
   }
@@ -2388,7 +2559,7 @@ void GFX4dIoD9::UserImageHideBG(int hndl, int objBG){
   UserImageDR(objBG, tuix[hndl], tuiy[hndl], tuiw[hndl], tuih[hndl], tuix[hndl], tuiy[hndl]);
   imageTouchEnable(hndl, false);
   } else {
-  for(int n = 0; n > 200; n++){
+  for(int n = 0; n > MAX_WIDGETS; n++){
   UserImageDR(objBG, tuix[n], tuiy[n], tuiw[n], tuih[n], tuix[n], tuiy[n]);
   imageTouchEnable(n, false);
   }
@@ -2400,7 +2571,7 @@ uint16_t GFX4dIoD9::RGBto565(uint8_t rc, uint8_t gc, uint8_t bc) {
 }
 
 void GFX4dIoD9::Orientation(uint8_t m) {
-  SPI.beginTransaction(spiSettings);  
+  SPI.beginTransaction(spiSettingsD);  
   digitalWrite(_dc, LOW);
   digitalWrite(_cs, LOW);
   SPI.write(0x36);
@@ -2457,7 +2628,7 @@ void GFX4dIoD9::Orientation(uint8_t m) {
 
 
 void GFX4dIoD9::Invert(boolean i) {
-  SPI.beginTransaction(spiSettings);  
+  SPI.beginTransaction(spiSettingsD);  
   if(i){
   SetCommand(GFX4dIoD9_INVON);
   } else {
@@ -2467,7 +2638,7 @@ void GFX4dIoD9::Invert(boolean i) {
 }
 
 uint8_t GFX4dIoD9::ReadCommand(uint8_t c, uint8_t index) {
-  SPI.beginTransaction(spiSettings);
+  SPI.beginTransaction(spiSettingsD);
   digitalWrite(_cs, LOW);
   digitalWrite(_dc, LOW);
   SPI.write(0xD9);
@@ -2552,7 +2723,7 @@ void GFX4dIoD9::UserCharacter(uint32_t *data, uint8_t ucsize, int16_t ucx, int16
   uint8_t ucwidth = tdw;
   tdw = *data++;
   uint8_t ucheight = tdw;
-  uint16_t ucloop = (ucwidth * ucheight) / 2;
+  uint16_t ucloop = (ucwidth * ucheight) >> 1;
   uint32_t test2 = 0;
   tdw = *data++;
   if(ucx > -1 && ucy > -1 && (ucx + ucwidth - 1) < (width) && (ucy + ucheight - 1) < (height)){
@@ -2576,7 +2747,7 @@ void GFX4dIoD9::UserCharacter(uint32_t *data, uint8_t ucsize, int16_t ucx, int16
   for(int c = 0; c < ucloop; c++){
   mx = ucx + left; my = ucy + top;
   test2 = (tdw >> (ucwidth - 1) - left) & 0x1;
-  if((mx) > -1 && (my) > -1 && (mx) < (width) && (my) < (height)){
+  if(mx > -1 && my > -1 && mx < width && my < height){
   if(test2 == 1){
   PutPixel(mx, my, color);
   } else {
@@ -2586,7 +2757,7 @@ void GFX4dIoD9::UserCharacter(uint32_t *data, uint8_t ucsize, int16_t ucx, int16
   left++;
   mx = ucx + left;
   test2 = (tdw >> (ucwidth - 1) - left) & 0x1;
-  if((mx) > -1 && (my) > -1 && (mx) < (width) && (my) < (height)){
+  if(mx > -1 && my > -1 && mx < width && my < height){
   if(test2 == 1){
   PutPixel(mx, my, color);
   } else {
@@ -2603,7 +2774,7 @@ void GFX4dIoD9::UserCharacter(uint32_t *data, uint8_t ucsize, int16_t ucx, int16
   }
 }
 
-void GFX4dIoD9::UserImageDR(uint8_t ui, uint16_t uxpos, uint16_t uypos, uint16_t uwidth, uint16_t uheight, uint16_t uix, uint16_t uiy){
+void GFX4dIoD9::UserImageDR(uint16_t ui, int16_t uxpos, int16_t uypos, int16_t uwidth, int16_t uheight, int16_t uix, int16_t uiy){
   if(uxpos >= width || uypos >= height || uxpos < 0 || uypos < 0) return;
   if((uxpos + uwidth - 1) < 0 || (uypos + uheight - 1) < 0) return;
   if((uxpos + uwidth - 1) > width || (uypos + uheight - 1) > height) return;
@@ -2641,13 +2812,25 @@ void GFX4dIoD9::UserImageDR(uint8_t ui, uint16_t uxpos, uint16_t uypos, uint16_t
   setGRAM(uix, uiy, uix + uwidth  -1, uiy + uheight -1);
   for(int n = 0; n < steps; n++){
   userImag.read(buf, bufsize);
+  #ifndef ESP32
   WrGRAMs8(buf, bufsize, mul);
+  #else
+  uint16_t buf16[bufsize >> 1];
+  if(mul == 2){
+  for(int b = 0; b < bufsize; b += 2){
+  buf16[b >> 1] = (buf[b] << 8) | buf[b + 1]; 
+  }
+  WrGRAMs16(buf16, bufsize);
+  } else {
+  WrGRAMs8(buf, bufsize, mul);
+  }
+  #endif
   bgoff = bgoff + (tuiw[ui] << (mul - 1));
   userImag.seek(bgoff);
   }
 }
 
-void GFX4dIoD9::UserImagesDR(uint8_t uino, int frames, uint16_t uxpos, uint16_t uypos, uint16_t uwidth, uint16_t uheight){
+void GFX4dIoD9::UserImagesDR(uint16_t uino, int frames, int16_t uxpos, int16_t uypos, int16_t uwidth, int16_t uheight){
  if(uxpos >= width || uypos >= height || uxpos < 0 || uypos < 0) return;
   if((uxpos + uwidth - 1) < 0 || (uypos + uheight - 1) < 0) return;
   if((uxpos + uwidth - 1) > width || (uypos + uheight - 1) > height) return;
@@ -2686,24 +2869,45 @@ void GFX4dIoD9::UserImagesDR(uint8_t uino, int frames, uint16_t uxpos, uint16_t 
   return;
   }
   setGRAM(tuix[uino] + uxpos, tuiy[uino] + uypos, tuix[uino] + uxpos + uwidth  -1, tuiy[uino] + uypos + uheight -1);
+  #ifndef ESP8266
+  uint16_t pc = 0;
+  #endif
   for(int n = 0; n < steps; n++){
   userImag.read(buf, bufsize);
+  #ifndef ESP32
   WrGRAMs8(buf, bufsize, mul);
+  #else
+  if(mul == 2){
+  for(int b = 0; b < bufsize; b += 2){
+  buf16[pc] = (buf[b] << 8) | buf[b + 1];
+  pc ++;
+  if(pc == 12000){
+  WrGRAMs16(buf16, pc << 1);
+  pc = 0;
+  } 
+  }
+  } else {
+  WrGRAMs8(buf, bufsize, mul);
+  }
+  #endif
   bgoff = bgoff + (tuiw[uino] << (mul - 1));
   userImag.seek(bgoff);
   }
+  #ifndef ESP8266
+  if(mul == 2 && pc > 0) WrGRAMs16(buf16, pc << 1);
+  #endif
   ScrollEnable(setemp);
 } 
 
-void GFX4dIoD9::UserCharacterBG(uint32_t *data, uint8_t ucsize, uint16_t ucx, uint16_t ucy, uint16_t color, boolean draw, uint32_t bgindex) {
+void GFX4dIoD9::UserCharacterBG(uint32_t *data, uint8_t ucsize, int16_t ucx, int16_t ucy, uint16_t color, boolean draw, uint32_t bgindex) {
   UserCharacterBG(data, ucsize, ucx, ucy, color, draw, bgindex, true, 0);
 }
 
-void GFX4dIoD9::UserCharacterBG(int8_t ui, uint32_t *data, uint8_t ucsize, uint16_t ucx, uint16_t ucy, uint16_t color, boolean draw) {
+void GFX4dIoD9::UserCharacterBG(uint16_t ui, uint32_t *data, uint8_t ucsize, int16_t ucx, int16_t ucy, uint16_t color, boolean draw) {
   UserCharacterBG(data, ucsize, ucx, ucy, color, draw, tuiIndex[ui], false, ui);
 }
 
-void GFX4dIoD9::UserCharacterBG(uint32_t *data, uint8_t ucsize, uint16_t ucx, uint16_t ucy, uint16_t color, boolean draw, uint32_t bgindex, bool type, int8_t ui) {
+void GFX4dIoD9::UserCharacterBG(uint32_t *data, uint8_t ucsize, int16_t ucx, int16_t ucy, uint16_t color, boolean draw, uint32_t bgindex, bool type, int8_t ui) {
   if((!dataFile && type) || (!userImag && !type)){
   return;
   }
@@ -2796,7 +3000,11 @@ boolean GFX4dIoD9::CheckDL(void){
 void GFX4dIoD9::Download(String Address, uint16_t port, String hfile, String Fname, String sha1){   
   dlok = false;
   int cstream;
+  #ifndef USE_FS
   File Dwnload;
+  #else
+  fs::File Dwnload;
+  #endif
   HTTPClient http;
   if(port > 0){
   http.begin(Address,port,hfile);
@@ -2804,7 +3012,9 @@ void GFX4dIoD9::Download(String Address, uint16_t port, String hfile, String Fna
   if(sha1 == ""){
   http.begin(Address);
   } else {
+  #ifndef ESP32
   http.begin(Address, sha1);
+  #endif
   }
   }
   int httpCode = http.GET();
@@ -2815,10 +3025,17 @@ void GFX4dIoD9::Download(String Address, uint16_t port, String hfile, String Fna
   if(sdok == false){
   return;
   }
+  #ifndef USE_FS
   if(SD.exists((char*)Fname.c_str())) {
   SD.remove((char*)Fname.c_str());
   }
   Dwnload = SD.open((char*)Fname.c_str(), FILE_WRITE);
+  #else
+  if(SPIFFS.exists((char*)Fname.c_str())) {
+  SPIFFS.remove((char*)Fname.c_str());
+  }
+  Dwnload = SPIFFS.open((char*)Fname.c_str(), "w");
+  #endif
   int32_t lens = http.getSize();
   if(lens == 0){
   return;
@@ -2959,7 +3176,7 @@ uint8_t GFX4dIoD9::hue_RGB(uint8_t Hin, uint8_t M1, uint8_t M2){
   return Value ;
 }
 
-void GFX4dIoD9::HLS2RGB(uint8_t H, uint8_t L, uint8_t S){
+void GFX4dIoD9::HLS2RGB(int H, int L, int S){
   uint8_t M1, M2 ;
   if (S == 0){
   GFX4dIoD9_RED = L ;
@@ -2981,11 +3198,11 @@ void GFX4dIoD9::HLS2RGB(uint8_t H, uint8_t L, uint8_t S){
   }
 }
 
-void GFX4dIoD9::imageTouchEnable(uint8_t gcinum, boolean en){
+void GFX4dIoD9::imageTouchEnable(int gcinum, boolean en){
   return;
 }
 
-uint8_t GFX4dIoD9::imageTouched(){
+uint16_t GFX4dIoD9::imageTouched(){
   return 255;
 }
 
@@ -3014,4 +3231,494 @@ boolean GFX4dIoD9::touch_Update() {
 
 void GFX4dIoD9::touch_Set(uint8_t mode) {
   return;
+}
+
+void GFX4dIoD9::WrGRAMs16232(uint16_t *data, uint16_t l) {
+  uint32_t tdw;
+  SPI.beginTransaction(spiSettingsD);
+  digitalWrite(_dc, HIGH);  
+  digitalWrite(_cs, LOW);
+  while(l){
+  tdw = (*data++ << 16) + *data++;
+  l-= 2;
+  SPI.write32(tdw);
+  }
+  if(l < 0)SPI.write16(*data++);
+  digitalWrite(_cs, HIGH);
+  SPI.endTransaction();
+} 
+
+void GFX4dIoD9::WrGRAMs16232NT(uint16_t *data, uint16_t l) {
+  uint32_t tdw;
+  while(l){
+  tdw = (*data++ << 16) + *data++;
+  l-= 2;
+  SPI.write32(tdw);
+  }
+  if(l < 0)SPI.write16(*data++);
+}
+
+void GFX4dIoD9::WrGRAMend(){
+  digitalWrite(_cs, HIGH);
+  SPI.endTransaction();
+} 
+
+void GFX4dIoD9::WrGRAMstart(){
+  SPI.beginTransaction(spiSettingsD);
+  digitalWrite(_dc, HIGH);  
+  digitalWrite(_cs, LOW);
+} 
+
+void GFX4dIoD9::WrGRAM16232(uint16_t mcolor, int32_t l) {
+  uint32_t tdw;
+  SPI.beginTransaction(spiSettingsD);
+  digitalWrite(_dc, HIGH);  
+  digitalWrite(_cs, LOW);
+  if(l == 1){
+  SPI.write16(mcolor);
+  } else {
+  tdw = (mcolor << 16) | mcolor;
+  while(l > 0){
+  l-= 2;
+  SPI.write32(tdw);
+  }
+  if(l < 0)SPI.write16(mcolor);
+  }
+  digitalWrite(_cs, HIGH);
+  SPI.endTransaction();
+} 
+
+uint8_t GFX4dIoD9::getFontData(uint8_t fntnum, uint16_t val){
+  if(fntnum == 1) return font1[val];
+  if(fntnum == 2) return font2[val];
+  if(fntnum != 1 || fntnum != 2) return 0;
+}
+
+int16_t GFX4dIoD9::ImageTouchedAuto(int UpdateImages){
+    return -1;
+}
+
+void GFX4dIoD9::FontStyle(uint8_t ctyp){
+  fstyle = ctyp % 6;
+}
+
+uint16_t GFX4dIoD9::GetSliderValue(uint16_t ui, uint8_t axis, uint16_t uiv, uint16_t ming, uint16_t maxg){
+  int wpos;
+  int wsiz;
+  if(axis == HORIZONTAL_SLIDER){ 
+  wpos = uiv - tuix[ui] - ming; //y - 53 ;                        // y - top - 8
+  wsiz = tuiw[ui];
+  if (wpos < 0)
+  wpos = 0;                       // maxvalue-minvalue
+  else if (wpos > (wsiz - maxg))                    // height - 17)
+  wpos = gciobjframes[ui] - 1 ;
+  else
+  wpos = (gciobjframes[ui] - 1) * wpos / (wsiz - maxg) ;    // max-min - (max-min) * posn / (height-17)
+  return wpos;
+  }
+  if(axis == VERTICAL_SLIDER){ 
+  wpos = uiv - tuiy[ui] - ming;
+  wsiz = tuih[ui];
+  if (wpos < 0)
+  wpos = gciobjframes[ui] - 1;                       // maxvalue-minvalue
+  else if (wpos > (wsiz - maxg))                    // height - 17)
+  wpos = 0 ;
+  else
+  wpos = (gciobjframes[ui] - 1) - (gciobjframes[ui] - 1) * wpos / (wsiz - maxg) ;    // max-min - (max-min) * posn / (height-17)
+  return wpos;
+  }
+}
+
+int GFX4dIoD9::DecodeKeypad(int kpad, int kpress, byte *kbks, int8_t *kbck){
+  int key = -1;
+  int kv;
+  int koff;
+  if (shift) koff = kbck[10];
+  if (caps) koff = koff + (2 * kbck[10]);
+  if (ctrl) koff = (3 * kbck[10]);
+  bool skip = false;
+  if(kpress > -1){
+  key = kbks[kpress - kpad - 1 + koff];
+  kv = (kpress - kpad - 1) % kbck[10];//if(key != 0xff) gfx.TWwrite(key);
+  if(key == 0xff && !shift && (kv == kbck[5] || kv == kbck[6])){
+  if(!caps)UserImages(kpad,1) ;
+  if(caps)UserImages(kpad,0) ;
+  shift = true;
+  skip = true;
+  ctrl = false;
+  }
+  if(key == 0xff && shift && (kv == kbck[5] || kv == kbck[6]) && !skip){
+  if(!caps)UserImages(kpad,0) ;
+  if(caps)UserImages(kpad,1) ;
+  shift = false;
+  ctrl = false;
+  }
+  skip = false;
+  if(key == 0xff && kv == kbck[9] && !caps){
+  UserImages(kpad,1) ;
+  caps = true;
+  skip = true;
+  ctrl = false;
+  }
+  if(key == 0xff && kv == kbck[9] && caps && !skip){
+  UserImages(kpad,0) ;
+  caps = false;
+  ctrl = false;
+  }
+  skip = false;
+  if(key == 0xff && (kv == kbck[7] || kv == kbck[8]) && ctrl == false){
+  if(!caps)UserImages(kpad,0) ;
+  if(caps)UserImages(kpad,1) ;
+  ctrl = true;
+  shift = false;
+  skip = true;
+  }
+  if(key == 0xff && (kv == kbck[7] || kv == kbck[8]) && !skip){
+  ctrl = false;
+  }
+  }
+  if(key == 0xff) key = -1;
+  if(key != -1 && shift){
+  if(!caps)UserImages(kpad,0) ;
+  if(caps)UserImages(kpad,1) ;
+  shift = false;
+  ctrl = false;
+  }
+  return key;
+}
+
+void GFX4dIoD9::ResetKeypad(){
+  shift = false;
+  caps = false;
+  ctrl = false;
+}
+
+bool GFX4dIoD9::KeypadStatus(int keyType){
+  if(keyType == SHIFT) return shift;
+  if(keyType == CAPSLOCK) return caps;
+  if(keyType == CTRL) return ctrl;
+  return false;
+}
+
+bool GFX4dIoD9::SpriteInit(uint16_t *sdata, size_t nums) {
+  if(msprites < 1) return false;
+  uint16_t scount = 0;
+  int sdatpos;
+  int sprsize;
+  uint16_t cdpth = 1;
+  uint16_t nextpos = 4;
+  while(scount <= nums && cdpth > 0) {
+  spriteData[sdatpos] = sdata[scount];
+  spriteData[sdatpos + 1] = sdata[scount + 1];
+  spriteData[sdatpos + 2] = sdata[scount + 2];
+  cdpth = sdata[scount + 3];
+  spriteData[sdatpos + 3] = nextpos;
+  sprsize = (sdata[scount + 1] * sdata[scount + 2]) >> (cdpth - 1);
+  if(cdpth == SPRITE_8BIT && ((sdata[scount + 1] * sdata[scount + 2]) % 2) > 0) sprsize ++; 
+  if(cdpth == SPRITE_4BIT && ((sdata[scount + 1] * sdata[scount + 2]) % 4) > 0) sprsize ++;
+  nextpos = nextpos + sprsize + 4;
+  sdatpos += 4;
+  scount = nextpos - 4; 
+  }
+  yield();
+  return true;
+}
+
+bool GFX4dIoD9::SpriteAdd(int pos, int snum, int x, int y, uint16_t *sdata) {
+  if(snum > msprites) return false;
+  int spos = spriteData[(snum << 2) + 3];
+  byte coldepth = sdata[spos - 1];
+  spriteList[(pos << 3)] = 0;
+  spriteList[(pos << 3)] |= (coldepth << 1);
+  spriteList[(pos << 3) + SPRITE_MEMPOS] = spos;
+  spriteList[(pos << 3) + SPRITE_X] = x;
+  spriteList[(pos << 3) + SPRITE_Y] = y;
+  spriteList[(pos << 3) + SPRITE_WIDTH] = sdata[spos - 3];
+  spriteList[(pos << 3) + SPRITE_HEIGHT] = sdata[spos - 2];
+  spriteLast[pos << 1] = x;
+  spriteLast[(pos << 1) + 1] = y;
+  spriteNum[pos] = snum;
+  if(pos + 1 > numSprites) numSprites = pos + 1;
+  return true;
+}
+
+void GFX4dIoD9::SpriteAreaSet(uint16_t x, uint16_t y, uint16_t x1, uint16_t y1) {
+  spriteArea[0] = x;
+  spriteArea[1] = y;
+  spriteArea[2] = x1;
+  spriteArea[3] = y1;
+  saSet = true;
+}
+
+void GFX4dIoD9::SetSprite(int num, bool active, int x, int y, uint16_t bscolor, uint16_t * sdata) {
+  bool delsprite = false;
+  int lxy = num << 1;
+  int dxy = num << 3;
+  int sacoords[6];
+  int rx = 0xffff;
+  int ry = 0xffff;
+  int dsx = spriteList[dxy + SPRITE_X];
+  int dsy = spriteList[dxy + SPRITE_Y];
+  if(spriteList[(num << 3) + 0] == 1 && active == 0){
+  delsprite = true;
+  }
+  if(spriteList[dxy] == 0){
+  spriteLast[lxy] = x;
+  spriteLast[lxy + 1] = y;
+  }  
+  spriteList[dxy] |= active;
+  spriteList[dxy + SPRITE_X] = x;
+  spriteList[dxy + SPRITE_Y] = y;
+  int16_t tsx, tsy, tsx1, tsy1;
+  if(!delsprite){
+  if(spriteLast[lxy] <= x){
+  tsx = spriteLast[lxy];
+  tsx1 = x + spriteList[dxy + SPRITE_WIDTH];
+  } else {
+  tsx1 = spriteLast[lxy]  + spriteList[dxy + SPRITE_WIDTH];
+  tsx = x;
+  }
+  if(spriteLast[lxy + 1] <= y){
+  tsy = spriteLast[lxy + 1];
+  tsy1 = y + spriteList[dxy + SPRITE_HEIGHT];
+  } else {
+  tsy1 = spriteLast[lxy + 1] + spriteList[dxy + SPRITE_HEIGHT];
+  tsy = y;
+  }
+  } else {
+  tsx = dsx;
+  tsy = dsy;
+  tsx1 = dsx + spriteList[dxy + SPRITE_WIDTH];
+  tsy1 = dsy + spriteList[dxy + SPRITE_HEIGHT];
+  }
+  spriteLast[lxy] = x;
+  spriteLast[lxy + 1] = y;
+  if((((tsx1 - tsx) >> 1) + 1 > spriteList[dxy + SPRITE_WIDTH] || ((tsy1 - tsy) >> 1) + 1 > spriteList[dxy + SPRITE_HEIGHT]) && spriteList[dxy + SPRITE_ACTIVE]){
+  spriteList[dxy + SPRITE_ACTIVE] |= 0;
+  SpriteUpdate(dsx, dsy, dsx + spriteList[dxy + SPRITE_WIDTH], dsy + spriteList[dxy + SPRITE_HEIGHT], bscolor, sdata);
+  spriteList[dxy + SPRITE_ACTIVE] |= 1;
+  SpriteUpdate(x, y, x + spriteList[dxy + SPRITE_WIDTH], y + spriteList[dxy + SPRITE_HEIGHT], bscolor, sdata);
+  } else {
+  SpriteUpdate(tsx, tsy, tsx1, tsy1, bscolor, sdata);
+  }  
+}
+
+void GFX4dIoD9::SpriteUpdate(int16_t tsx, int16_t tsy, int16_t tsx1, int16_t tsy1, uint16_t bscolor, uint16_t * sdata){
+  saSet = true;
+  if(tsx >= width || tsy >= height || tsx1 < 1 || tsy1 < 1) return; 
+  if(tsx < 0) tsx = 0;
+  if(tsy < 0) tsy = 0;
+  if(tsx1 >= width) tsx1 = width - 1;
+  if(tsy1 >= height) tsy1 = height - 1;
+  spriteArea[0] = tsx;
+  spriteArea[1] = tsy;
+  spriteArea[2] = tsx1;
+  spriteArea[3] = tsy1;
+  UpdateSprites(bscolor, sdata); 
+}
+  
+int GFX4dIoD9::GetSprite(int snum, int choice){
+  return spriteList[(snum << 3) + choice];  
+}
+
+void GFX4dIoD9::UpdateSprites(uint16_t bscolor, uint16_t * sdata) {
+  if (!saSet) return;
+  setGRAM(spriteArea[0], spriteArea[1], spriteArea[2], spriteArea[3]);  
+  WrGRAMstart();
+  byte tog = 0;
+  byte cdepth;
+  uint16_t sspos = 0;
+  int collide;
+  int addr;
+  int xo, yo;
+  uint32_t tdw;
+  uint16_t wscolor;
+  uint16_t cscolor;
+  uint16_t tscolor;
+  #ifndef ESP8266
+  uint16_t bufsp[spriteArea[2] + 1];
+  uint16_t count;
+  #endif
+  int spriteAPos;
+  for (int ns = 0; ns < numSprites; ns ++){
+  spriteList[(ns << 3) + 6] = -1;
+  spriteList[(ns << 3) + 7] = -1;
+  }
+  collide = -1;
+  for (int y = 0; y < spriteArea[3] - spriteArea[1] + 1; y ++) {
+  #ifndef ESP8266
+  count = 0;
+  #endif
+  for (int x = 0; x < spriteArea[2] - spriteArea[0] + 1; x ++) {
+  wscolor = bscolor;
+  collide = -1;
+  for (int chk = 0; chk < numSprites; chk ++) {
+  xo = spriteArea[0] + x;
+  yo = spriteArea[1] + y;
+  addr = chk << 3;
+  cdepth = spriteList[addr] >> 1;
+  spriteAPos = spriteList[addr + SPRITE_MEMPOS];
+  sdetaily = spriteList[addr + SPRITE_Y];
+  sdetailh = spriteList[addr + SPRITE_HEIGHT];
+  sdetailx = spriteList[addr + SPRITE_X];
+  sdetailw = spriteList[addr + SPRITE_WIDTH];
+  if ((spriteList[addr] & 0x01) && yo >= sdetaily && yo <=  sdetaily + sdetailh - 1 && xo >= sdetailx && xo <= sdetailx + sdetailw - 1) {
+  tscolor = sdata[spriteAPos - 4];
+  sspos = ((yo - sdetaily) * sdetailw) + (xo - sdetailx);
+  if(cdepth == SPRITE_16BIT) cscolor = sdata[spriteAPos + sspos];
+  if(cdepth == SPRITE_8BIT){ 
+  uint16_t tcscol = sdata[spriteAPos + (sspos >> 1)];
+  cscolor = RGB3322565[(tcscol >> 8 * ((sspos % 2) == 0)) & 0xff];
+  }
+  if(cdepth == SPRITE_4BIT){ 
+  uint16_t tcscol = sdata[spriteAPos + (sspos >> 2)];
+  cscolor = palette4bit[(tcscol >> ((3 - (sspos % 4)) * 4)) & 0x0f];
+  }
+  if (cscolor != tscolor){
+  wscolor = cscolor;
+  if(collide == -1){
+  collide = chk;
+  } else if(collide != -1){
+  if(spriteList[(collide << 3) + SPRITE_COLLIDE1] == -1){
+  spriteList[(collide << 3) + SPRITE_COLLIDE1] = chk;
+  spriteList[addr + SPRITE_COLLIDE1] = collide;
+  } else {
+  spriteList[(collide << 3) + SPRITE_COLLIDE2] = chk;
+  spriteList[addr + SPRITE_COLLIDE1] = collide;
+  }
+  collide = chk;
+  }              
+  }
+  }
+  }
+  #ifdef ESP8266
+  if(tog == 0) tdw = wscolor << 16;
+  if(tog == 1){
+  SPI.write32(tdw + wscolor);
+  }
+  tog ^= 1;
+  }
+  }
+  if(tog == 1) SPI.write16(tdw >> 16);
+  WrGRAMend();
+  yield();
+  #else
+  bufsp[count] = wscolor;
+  count ++;
+  }
+  SPI.writePixels(bufsp, count * 2);
+  }
+  WrGRAMend();
+  #endif
+}
+
+void GFX4dIoD9::SetNumberSprites(uint16_t numspr){
+  numSprites = numspr;
+}
+
+int GFX4dIoD9::GetNumberSprites(){
+  return numSprites;
+}
+
+int GFX4dIoD9::SpriteTouched(){
+  return -1;
+}
+
+ int16_t GFX4dIoD9::GetSpriteImageNum(int snum){
+   return spriteNum[snum];
+ }
+ 
+ uint16_t GFX4dIoD9::SpriteGetPixel(int snum, int xo, int yo, uint16_t tcolor, uint16_t * sdata){
+   uint16_t cscolor = 0x0000;
+   uint16_t rcolor = tcolor;
+   uint16_t sspos;
+   byte cdepth;
+   int chks, chke;
+   if(snum < 0){
+   chks = 0; chke = numSprites;
+   } else {
+   chks = snum; chke = snum + 1;
+   }
+   for (int chk = chks; chk < chke; chk ++) {
+   uint16_t addr = chk << 3;
+   cdepth = spriteList[addr] >> 1;
+   if (spriteList[addr] && yo >= spriteList[addr + SPRITE_Y] && yo <=  spriteList[addr + SPRITE_Y] + spriteList[addr + SPRITE_HEIGHT] - 1 && xo >= spriteList[addr + SPRITE_X] && xo <= spriteList[addr + SPRITE_X] + spriteList[addr + SPRITE_WIDTH] - 1) {
+   sspos = ((yo - spriteList[addr + SPRITE_Y]) * spriteList[addr + SPRITE_WIDTH]) + (xo - spriteList[addr + SPRITE_X]);
+   if(cdepth == SPRITE_16BIT) cscolor = sdata[spriteList[addr + SPRITE_MEMPOS] + sspos];
+   if(cdepth == SPRITE_8BIT){ 
+   uint16_t tcscol = sdata[spriteList[addr + SPRITE_MEMPOS] + (sspos >> 1)];
+   cscolor = RGB3322565[(tcscol >> 8 * ((sspos % 2) == 0)) & 0xff];
+   }
+   if(cdepth == SPRITE_4BIT){ 
+   uint16_t tcscol = sdata[spriteList[addr + SPRITE_MEMPOS] + (sspos >> 2)];
+   cscolor = palette4bit[(tcscol >> ((3 - (sspos % 4)) * 4)) & 0x0f];
+   }
+   if(cscolor != tcolor) rcolor = cscolor;
+   }
+   }
+   return rcolor;
+}
+
+int GFX4dIoD9::GetSpritesAt(int xo, int yo, uint16_t tcolor, int * slist, uint16_t * sdata){
+   uint16_t cscolor = 0x0000;
+   uint16_t sspos;
+   int snum = 0;
+   int r = -1;
+   byte cdepth;
+   for (int chk = 0; chk < numSprites; chk ++) {
+   slist[chk] = -1;
+   uint16_t addr = chk << 3;
+   cdepth = spriteList[addr] >> 1;
+   if (spriteList[addr] && yo >= spriteList[addr + SPRITE_Y] && yo <=  spriteList[addr + SPRITE_Y] + spriteList[addr + SPRITE_HEIGHT] - 1 && xo >= spriteList[addr + SPRITE_X] && xo <= spriteList[addr + SPRITE_X] + spriteList[addr + SPRITE_WIDTH] - 1) {
+   sspos = ((yo - spriteList[addr + SPRITE_Y]) * spriteList[addr + SPRITE_WIDTH]) + (xo - spriteList[addr + SPRITE_X]);
+   if(cdepth == SPRITE_16BIT) cscolor = sdata[spriteList[addr + SPRITE_MEMPOS] + sspos];
+   if(cdepth == SPRITE_8BIT){ 
+   uint16_t tcscol = sdata[spriteList[addr + SPRITE_MEMPOS] + (sspos >> 1)];
+   cscolor = RGB3322565[(tcscol >> 8 * ((sspos % 2) == 0)) & 0xff];
+   }
+   if(cdepth == SPRITE_4BIT){ 
+   uint16_t tcscol = sdata[spriteList[addr + SPRITE_MEMPOS] + (sspos >> 2)];
+   cscolor = palette4bit[(tcscol >> ((3 - (sspos % 4)) * 4)) & 0x0f];
+   }
+   if(cscolor != tcolor){
+   slist[snum] = chk;
+   snum ++;
+   r = snum;
+   }
+   }
+   }
+   return r;
+}
+
+void GFX4dIoD9::SpriteEnable(int snum, bool sen){
+  spriteList[snum << 3] |= sen;
+}
+
+void GFX4dIoD9::SpriteSetPalette(int pnumber, uint16_t plcolor){
+  palette4bit[pnumber % 16] = plcolor;
+}  
+
+uint16_t GFX4dIoD9::SpriteGetPalette(int pnumber){
+  return palette4bit[pnumber % 16];
+}
+
+void GFX4dIoD9::SetMaxNumberSprites(uint16_t snos){
+  snos = snos << 1;
+  uint16_t bytes = (uint16_t)snos << 2; 
+  if((spriteData = (int16_t *)malloc(bytes))) {
+  memset(spriteData, 0, bytes);
+  }
+  bytes = (uint16_t)snos << 3; 
+  if((spriteList = (int16_t *)malloc(bytes))) {
+  memset(spriteList, 0, bytes);
+  }
+  bytes = (uint16_t)snos << 1; 
+  if((spriteLast = (int16_t *)malloc(bytes))) {
+  memset(spriteLast, 0, bytes);
+  }
+  bytes = (uint16_t)snos; 
+  if((spriteNum = (int16_t *)malloc(bytes))) {
+  memset(spriteNum, -1, bytes);
+  }
+  msprites = snos >> 1;
 }
