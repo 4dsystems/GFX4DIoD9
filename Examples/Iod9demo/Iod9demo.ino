@@ -181,7 +181,7 @@ void setup() {
    gfx.TWcolor(RED);
   gfx.TWprintln("Connection Fail.");
   }
-  if(Wconnected){
+  /*if(Wconnected){
     delay(2000);
     gfx.TWcolor(YELLOW);
     gfx.TWprintln("Connecting to.");
@@ -191,10 +191,12 @@ void setup() {
     gfx.TWprintln("Systems");
     delay(1000);
     gfx.MoveTo(0,0);
-    gfx.PrintImageWifi("http://hosting.4dsystems.com.au/IoDFiles/iod9.gci");
-    delay(4000);
+    //gfx.PrintImageWifi("http://hosting.4dsystems.com.au/IoDFiles/iod9.gci");
+    //delay(4000);
     gfx.Cls();
     }
+    */
+    gfx.Cls();
     gfx.Open4dGFX("iod9");
     gfx.TWcolor(WHITE);
 }
@@ -442,4 +444,3 @@ void invaders(){
   } 
   }
 }
-

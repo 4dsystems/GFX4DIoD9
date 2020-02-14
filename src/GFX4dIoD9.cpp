@@ -197,6 +197,7 @@
 #define MADCTL_RGB 0x00
 #define MADCTL_BGR 0x08
 #define MADCTL_MH 0x04
+#define SDFS_H
 
 GFX4dIoD9::GFX4dIoD9(){
     _cs   = 15; //15
@@ -295,11 +296,11 @@ void GFX4dIoD9::begin() {
   Orientation(0);
   #ifndef USE_FS
   #ifndef ESP32
-  #ifdef SDFS_H
+  //#ifdef SDFS_H
   if(SD.begin(_sd, spiSettings)){
-  #else
-  if(SD.begin(_sd, 79000000)){
-  #endif
+  //#else
+  //if(SD.begin(_sd, 79000000)){
+  //#endif
   #else
   if(SD.begin(_sd, SPI, 79000000)){
   #endif
