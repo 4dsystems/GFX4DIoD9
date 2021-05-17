@@ -1,7 +1,6 @@
 ![image](http://www.4dsystems.com.au/downloads/4DLogo.png)
-
 # GFX4dIoD9
-================================================================================
+============================================================================
 
 Graphics Library for the IoD-09TH and IoD-09SM by 4D Systems
 
