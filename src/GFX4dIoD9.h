@@ -2,7 +2,7 @@
 *                                                                          *
    4D Systems GFX4dIoD9 Library
 *                                                                          *
-   Date:        18th May 2021
+   Date:        4th June 2021
 *                                                                          *
    Description: Provides Graphics, Touch Control and SD Card functions
                 for 4D Systems Gen4 IoD range of intelligent displays.
@@ -182,11 +182,15 @@
 #include "Print.h"
 #include <ESP8266HTTPClient.h>
 #ifndef USE_FS
-//#include <SDFS.h>
+//#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+//  #include "SdFat.h"
+//  #include "sdios.h"
+//#else
 #include <SD.h>
+//#endif
 #else
 //#define FS_NO_GLOBALS //allow spiffs to coexist with SD card, define BEFORE including FS.h
-#include <FS.h> //spiff file system
+#include <LittleFS.h> //spiff file system
 #endif
 
 
@@ -435,12 +439,12 @@
 
 //#define PROGMEM
 
-#define _redmask                        0xF800
-#define _greenmask                      0x07E0
-#define _bluemask                       0x001F
+#define _redmask    0xF800
+#define _greenmask  0x07E0
+#define _bluemask   0x001F
 #define GET_VERSION                     0x10
-#define ENABLE_TOUCH                    0x12
-#define DISABLE_TOUCH                   0x13
+#define ENABLE_TOUCH                     0x12
+#define DISABLE_TOUCH                    0x13
 #define CALIBRATE_MODE                  0x14
 #define REGISTER_READ                   0x20
 #define REGISTER_WRITE                  0x21
@@ -454,12 +458,12 @@
 //#define TOUCH_GETY                      0x02
 #define TOUCH_ENABLE                    0x00
 #define TOUCH_DISABLE                   0x01
-#define  HORIZONTAL_SLIDER              0x00
-#define  VERTICAL_SLIDER                0x01
+#define  HORIZONTAL_SLIDER        0x00
+#define  VERTICAL_SLIDER        0x01
 #define  SHIFT                          0x01
 #define  CAPSLOCK                       0x02
 #define  CTRL                           0x03
-#define  SPRITE_ACTIVE                  0x00
+#define  SPRITE_ACTIVE          0x00
 #define  SPRITE_MEMPOS                  0x01
 #define  SPRITE_X                       0x02
 #define  SPRITE_Y                       0x03

@@ -2,7 +2,7 @@
 *                                                                          *
    4D Systems GFX4dIoD9 Library
 *                                                                          *
-   Date:        18th May 2021
+   Date:        4th June 2021
 *                                                                          *
    Description: Provides Graphics, Touch Control and SD Card functions
                 for 4D Systems Gen4 IoD range of intelligent displays.
@@ -182,6 +182,10 @@
 #include <SPI.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
+#include <WiFiClientSecure.h>
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+#include <WiFiClientSecureBearSSL.h>
+#endif
 //#include "SdFat.h"
 
 //SdFat SD;
@@ -298,19 +302,15 @@ void GFX4dIoD9::begin()
   Cls(0);
   Orientation(0);
 #ifndef USE_FS
-  //#ifndef ESP32
-  //#ifdef SDFS_H
-  if (SD.begin(_sd, spiSettings))
-  {
-    //#else
-    //if(SD.begin(_sd, 79000000)){
-    //#endif
-    //#else
-    //if(SD.begin(_sd, spiSettings)) {
-    //if(SD.begin(_sd, SPI, 79000000)){
-    //#endif
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+  if (SD.begin(5, SD_SCK_MHZ(79)))
+    //if(SD.begin(SD_CONFIG))
 #else
-  if (SPIFFS.begin())
+  if (SD.begin(_sd, spiSettings))
+#endif
+  {
+#else
+  if (LittleFS.begin())
   {
 #endif
     sdok = true;
@@ -1183,7 +1183,7 @@ void GFX4dIoD9::PrintImageFile(String ifile)
 #ifndef USE_FS
   dataFile = SD.open(ifile);
 #else
-  dataFile = SPIFFS.open((char*)ifile.c_str(), "r");
+  dataFile = LittleFS.open((char*)ifile.c_str(), "r");
 #endif
   if (!dataFile)
   {
@@ -1273,36 +1273,70 @@ void GFX4dIoD9::ImageWifi(boolean local, String Address, uint16_t port, String h
     tempnl = true;
     newLine(lastfsh, textsizeht, 0);
   }
-  WiFiClient client;
   HTTPClient http;
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+  WiFiClient client;
+#endif
   if (local)
   {
     if (sha1 == "")
     {
-      //println(hfile);
-      /*if(!*/http.begin(client, Address, port, hfile)/*) return*/;
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+      if (!http.begin(client, Address, port, hfile)) return;
+#else
+      if (!http.begin(Address, port, hfile)) return;
+#endif
     }
     else
     {
-      //#ifndef ESP32
-      //if(!http.begin(Address,port,hfile,sha1)) return;
-      //#endif
+#ifndef ESP32
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+      std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
+      if (sha1 == "INSECURE")
+      {
+        client->setInsecure();
+      }
+      else
+      {
+        client->setFingerprint((char*)sha1.c_str());
+      }
+      if (!http.begin(*client, Address, port, hfile)) return;
+#else
+      if (!http.begin(Address, port, hfile, sha1)) return;
+#endif
+#endif
     }
   }
   else
   {
     if (sha1 == "")
     {
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+      if (!http.begin(client, Address)) return;
+#else
       if (!http.begin(Address)) return;
+#endif
     }
     else
     {
-      //#ifndef ESP32
-      //if(!http.begin(Address,sha1)) return;
-      //#endif
+#ifndef ESP32
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+      std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
+      if (sha1 == "INSECURE")
+      {
+        client->setInsecure();
+      }
+      else
+      {
+        client->setFingerprint((char*)sha1.c_str());
+      }
+      if (!http.begin(* client, Address)) return;
+#else
+      if (!http.begin(Address, sha1)) return;
+#endif
+#endif
     }
   }
-  yield();
   int httpCode = http.GET();
   Serial.println(httpCode);
   yield();
@@ -1403,14 +1437,12 @@ void GFX4dIoD9::Open4dGFX(String file4d)
   gciobjnum = 0;
   imageTouchEnable(-1, false);
   String inputString;
-#ifndef USE_FS
   dat4d = file4d + ".dat";
   gci4d = file4d + ".gci";
+#ifndef USE_FS
   userDat = SD.open(dat4d);
 #else
-  dat4d = "/" + file4d + ".dat";
-  gci4d = "/" + file4d + ".gci";
-  userDat = SPIFFS.open(dat4d, "r");
+  userDat = LittleFS.open((char*)dat4d.c_str(), "r");
 #endif
   if (userDat)
   {
@@ -1453,7 +1485,7 @@ void GFX4dIoD9::Open4dGFX(String file4d)
 #ifndef USE_FS
   userImag = SD.open(gci4d);
 #else
-  userImag = SPIFFS.open(gci4d, "r");
+  userImag = LittleFS.open((char*)gci4d.c_str(), "r");
 #endif
   uint32_t tIndex;
   int coldepth;
@@ -3624,22 +3656,45 @@ void GFX4dIoD9::Download(String Address, uint16_t port, String hfile, String Fna
 #else
   fs::File Dwnload;
 #endif
-  WiFiClient client;
   HTTPClient http;
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+  WiFiClient client;
+#endif
   if (port > 0)
   {
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
     http.begin(client, Address, port, hfile);
+#else
+    http.begin(Address, port, hfile);
+#endif
   }
   else
   {
     if (sha1 == "")
     {
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+      http.begin(client, Address);
+#else
       http.begin(Address);
+#endif
     }
     else
     {
 #ifndef ESP32
-      http.begin(Address, sha1);
+#if ARDUINO_ESP8266_GIT_VER > 0x2843a5ac
+      std::unique_ptr<BearSSL::WiFiClientSecure>client(new BearSSL::WiFiClientSecure);
+      if (sha1 == "INSECURE")
+      {
+        client->setInsecure();
+      }
+      else
+      {
+        client->setFingerprint((char*)sha1.c_str());
+      }
+      if (!http.begin(* client, Address)) return;
+#else
+      if (!http.begin(Address, sha1)) return;
+#endif
 #endif
     }
   }
@@ -3660,11 +3715,11 @@ void GFX4dIoD9::Download(String Address, uint16_t port, String hfile, String Fna
   }
   Dwnload = SD.open((char*)Fname.c_str(), FILE_WRITE);
 #else
-  if (SPIFFS.exists((char*)Fname.c_str()))
+  if (LittleFS.exists((char*)Fname.c_str()))
   {
-    SPIFFS.remove((char*)Fname.c_str());
+    LittleFS.remove((char*)Fname.c_str());
   }
-  Dwnload = SPIFFS.open((char*)Fname.c_str(), "w");
+  Dwnload = LittleFS.open((char*)Fname.c_str(), "w");
 #endif
   int32_t lens = http.getSize();
   if (lens == 0)
